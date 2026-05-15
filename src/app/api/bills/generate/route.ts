@@ -22,7 +22,14 @@ export async function POST() {
       include: {
         room: true,
         bills: {
-          select: { billingMonth: true, billingYear: true },
+          select: {
+            billingMonth: true,
+            billingYear: true,
+            previousReading: true,
+            currentReading: true,
+            ratePerUnit: true,
+          },
+          orderBy: [{ billingYear: 'asc' }, { billingMonth: 'asc' }],
         },
       },
     });
@@ -38,22 +45,13 @@ export async function POST() {
       const monthlyRent = guest.room.monthlyRent;
 
       // Determine which months need bills based on +1 Day Rule
-
-      // +1 Day Rule: Latest billable month determination
-      // On the cycle date itself: that month's period is COMPLETE, but next month's bill
-      // is NOT yet generated (it generates the day AFTER the cycle date)
-      // If currentDay > billingCycleDate: +1 Day triggered, current month needs a bill
-      // If currentDay <= billingCycleDate: still in previous period, previous month is latest
-
       let latestBillingMonth: number;
       let latestBillingYear: number;
 
       if (currentDay > billingCycleDate) {
-        // +1 Day Rule: current month's billing period has started
         latestBillingMonth = currentMonth;
         latestBillingYear = currentYear;
       } else {
-        // Still in previous period (or on cycle date = previous period's last day)
         latestBillingMonth = currentMonth - 1;
         latestBillingYear = currentYear;
         if (latestBillingMonth === 0) {
@@ -83,10 +81,40 @@ export async function POST() {
             dueMonth = 1;
             dueYear++;
           }
-          // Handle months where billingCycleDate doesn't exist (e.g., 31st in 30-day months)
           const maxDayInDueMonth = new Date(dueYear, dueMonth, 0).getDate();
           const effectiveDueDay = Math.min(billingCycleDate, maxDayInDueMonth);
           const dueDate = new Date(dueYear, dueMonth - 1, effectiveDueDay);
+
+          // ─── KEY FIX: Get previous reading from the PREVIOUS bill ───
+          // The new bill's previousReading = previous bill's currentReading
+          // This ensures electricity meter continuity across billing periods
+          const previousBills = guest.bills.filter(
+            (b) => b.billingYear < iterYear || (b.billingYear === iterYear && b.billingMonth < iterMonth)
+          );
+          // Also check bills we just created in this loop (they won't be in guest.bills)
+          const lastPreviousBill = previousBills.length > 0
+            ? previousBills[previousBills.length - 1]
+            : null;
+
+          // Use ?? instead of || to properly handle 0 as a valid reading
+          const previousReading = lastPreviousBill
+            ? (lastPreviousBill.currentReading ?? lastPreviousBill.previousReading ?? 0)
+            : 0;
+
+          // Also try to get from ElectricityReading table as fallback when previousReading is 0
+          let openingReading = previousReading;
+          if (openingReading === 0) {
+            const lastElecReading = await db.electricityReading.findFirst({
+              where: { guestId: guest.id },
+              orderBy: { readingDate: 'desc' },
+            });
+            if (lastElecReading) {
+              openingReading = lastElecReading.reading;
+            }
+          }
+
+          // Get ratePerUnit from previous bill or default to 10
+          const ratePerUnit = lastPreviousBill?.ratePerUnit ?? 10;
 
           // Create the missing bill
           const newBill = await db.bill.create({
@@ -97,10 +125,10 @@ export async function POST() {
               billingYear: iterYear,
               rentAmount: monthlyRent,
               electricityCharge: 0,
-              previousReading: 0,
-              currentReading: 0,
+              previousReading: openingReading,
+              currentReading: openingReading, // same as previous until a new reading is taken
               unitsConsumed: 0,
-              ratePerUnit: 10,
+              ratePerUnit,
               minChargePolicy: 'FULL_MONTH',
               manualAdjustment: 0,
               adjustmentReason: '',
@@ -109,6 +137,15 @@ export async function POST() {
               dueDate,
               status: 'Unpaid',
             },
+          });
+
+          // Add to guest.bills so subsequent iterations can reference it
+          guest.bills.push({
+            billingMonth: iterMonth,
+            billingYear: iterYear,
+            previousReading: openingReading,
+            currentReading: openingReading,
+            ratePerUnit,
           });
 
           billsCreated++;
@@ -130,7 +167,6 @@ export async function POST() {
     }
 
     // Also mark overdue bills: Unpaid bills whose dueDate has passed
-    // Use current date for comparison (timezone-safe)
     const todayForOverdue = new Date();
     const overdueBills = await db.bill.findMany({
       where: {

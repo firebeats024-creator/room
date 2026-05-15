@@ -152,3 +152,45 @@ export function daysBetween(
   const diffTime = Math.abs(end.getTime() - start.getTime());
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Calculate remaining days after accounting for complete months.
+ * Useful for displaying "2 Months 3 Days" instead of "2 Months 62 Days".
+ *
+ * @param checkInDate - Check-in date
+ * @param stayMonths - Number of complete billable months (from calculateStayMonths)
+ * @param referenceDate - Reference date (defaults to current date)
+ * @returns Remaining days after complete months (0 if exactly on anniversary)
+ */
+export function remainingDaysAfterMonths(
+  checkInDate: string | Date,
+  stayMonths: number,
+  referenceDate?: string | Date
+): number {
+  const checkIn = getDateComponents(checkInDate);
+  const ref = referenceDate
+    ? parseDateSafe(referenceDate)
+    : new Date();
+
+  // Find the anniversary date after `stayMonths` complete months
+  // e.g., check-in 15/03 + 2 months = 15/05
+  let anniversaryMonth = checkIn.month + stayMonths;
+  let anniversaryYear = checkIn.year;
+  while (anniversaryMonth > 12) {
+    anniversaryMonth -= 12;
+    anniversaryYear++;
+  }
+  // Handle day overflow (e.g., 31st in a 30-day month)
+  const maxDayInMonth = new Date(anniversaryYear, anniversaryMonth, 0).getUTCDate();
+  const anniversaryDay = Math.min(checkIn.day, maxDayInMonth);
+
+  const anniversary = new Date(Date.UTC(anniversaryYear, anniversaryMonth - 1, anniversaryDay));
+  const refUTC = new Date(Date.UTC(
+    ref instanceof Date ? ref.getUTCFullYear() : ref.getFullYear(),
+    ref instanceof Date ? ref.getUTCMonth() : ref.getMonth(),
+    ref instanceof Date ? ref.getUTCDate() : ref.getDate()
+  ));
+
+  const diffMs = refUTC.getTime() - anniversary.getTime();
+  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+}

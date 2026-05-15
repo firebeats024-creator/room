@@ -173,6 +173,7 @@ export default function PgGuests() {
     checkInDate: toISODate(new Date()),
     openingMeterReading: '',
     ratePerUnit: '10',
+    securityDeposit: '',
   });
 
   // Check-out state
@@ -262,6 +263,7 @@ export default function PgGuests() {
       checkInDate: toISODate(new Date()),
       openingMeterReading: '',
       ratePerUnit: '10',
+      securityDeposit: '',
     });
     fetchVacantRooms();
     setCheckinOpen(true);
@@ -297,6 +299,7 @@ export default function PgGuests() {
           checkInDate: checkinForm.checkInDate,
           openingMeterReading: parseFloat(checkinForm.openingMeterReading) || 0,
           ratePerUnit: parseFloat(checkinForm.ratePerUnit) || 10,
+          ...(checkinForm.securityDeposit !== '' ? { securityDeposit: parseFloat(checkinForm.securityDeposit) || 0 } : {}),
         }),
       });
 
@@ -821,13 +824,35 @@ export default function PgGuests() {
               </div>
             </div>
 
+            {/* Security Deposit */}
+            <div className="space-y-2">
+              <Label htmlFor="security-deposit" className="flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                Security Deposit (₹)
+              </Label>
+              <Input
+                id="security-deposit"
+                type="number"
+                min="0"
+                placeholder="Default: 1 month rent"
+                value={checkinForm.securityDeposit}
+                onChange={(e) => setCheckinForm((p) => ({ ...p, securityDeposit: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                {selectedRoom
+                  ? `Default: ${formatCurrency(selectedRoom.monthlyRent)} (1 month rent). Set 0 for no deposit.`
+                  : 'Select a room first. Set 0 for no deposit.'}
+              </p>
+            </div>
+
             {/* Payment Preview */}
             {selectedRoom && (
               <>
                 <Separator />
                 <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
                   <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    <CardTitle className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4" />
                       Payment Preview
                     </CardTitle>
                   </CardHeader>
@@ -837,13 +862,34 @@ export default function PgGuests() {
                       <span className="font-medium">{formatCurrency(selectedRoom.monthlyRent)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Security Deposit (1 month rent)</span>
-                      <span className="font-medium">{formatCurrency(selectedRoom.monthlyRent)}</span>
+                      <span className="text-muted-foreground">
+                        Security Deposit
+                        {(!checkinForm.securityDeposit || parseFloat(checkinForm.securityDeposit) === selectedRoom.monthlyRent) && (
+                          <span className="text-[10px] ml-1">(1 month rent)</span>
+                        )}
+                        {checkinForm.securityDeposit && parseFloat(checkinForm.securityDeposit) === 0 && (
+                          <span className="text-[10px] ml-1 text-amber-600">(No deposit)</span>
+                        )}
+                      </span>
+                      <span className="font-medium">
+                        {formatCurrency(
+                          checkinForm.securityDeposit
+                            ? parseFloat(checkinForm.securityDeposit) || 0
+                            : selectedRoom.monthlyRent
+                        )}
+                      </span>
                     </div>
                     <Separator className="my-2" />
                     <div className="flex justify-between font-semibold text-emerald-800 dark:text-emerald-200">
                       <span>Total Initial Payment</span>
-                      <span>{formatCurrency(selectedRoom.monthlyRent * 2)}</span>
+                      <span>
+                        {formatCurrency(
+                          selectedRoom.monthlyRent +
+                          (checkinForm.securityDeposit
+                            ? parseFloat(checkinForm.securityDeposit) || 0
+                            : selectedRoom.monthlyRent)
+                        )}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>

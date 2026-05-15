@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Building2, LayoutDashboard, BedDouble, Users, Receipt, ShieldCheck, Download, Code2 } from 'lucide-react'
 import PgDashboard from '@/components/pg-dashboard'
@@ -9,6 +8,14 @@ import PgRooms from '@/components/pg-rooms'
 import PgGuests from '@/components/pg-guests'
 import PgBilling from '@/components/pg-billing'
 import PgDeposits from '@/components/pg-deposits'
+
+const navItems = [
+  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { id: 'rooms', label: 'Rooms', icon: BedDouble },
+  { id: 'guests', label: 'Guests', icon: Users },
+  { id: 'billing', label: 'Billing', icon: Receipt },
+  { id: 'deposits', label: 'Deposits', icon: ShieldCheck },
+]
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -62,33 +69,33 @@ export default function Home() {
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 border-b border-emerald-200 dark:border-emerald-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-emerald-600 p-1.5">
                 <Building2 className="h-5 w-5 text-white" />
               </div>
-              <h1 className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+              <h1 className="text-base sm:text-lg font-bold text-emerald-900 dark:text-emerald-100">
                 PG Hostel Manager
               </h1>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDownloadSource}
                 disabled={downloading}
-                className="gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                className="gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 h-8"
               >
-                <Code2 className={`h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
+                <Code2 className={`h-3.5 w-3.5 ${downloading ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">{downloading ? 'Zipping...' : 'Source Code'}</span>
               </Button>
               <Button
                 size="sm"
                 onClick={handleExport}
                 disabled={exporting}
-                className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm h-8"
               >
-                <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
+                <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-bounce' : ''}`} />
                 <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export'}</span>
               </Button>
             </div>
@@ -96,54 +103,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-emerald-100 dark:border-emerald-900 bg-emerald-50/30 dark:bg-emerald-950/10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-transparent h-12 p-0 gap-1">
-              <TabsTrigger
-                value="dashboard"
-                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md h-9 px-3 gap-1.5 rounded-md text-sm"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="rooms"
-                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md h-9 px-3 gap-1.5 rounded-md text-sm"
-              >
-                <BedDouble className="h-4 w-4" />
-                <span className="hidden sm:inline">Rooms</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="guests"
-                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md h-9 px-3 gap-1.5 rounded-md text-sm"
-              >
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Guests</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="billing"
-                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md h-9 px-3 gap-1.5 rounded-md text-sm"
-              >
-                <Receipt className="h-4 w-4" />
-                <span className="hidden sm:inline">Billing</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="deposits"
-                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md h-9 px-3 gap-1.5 rounded-md text-sm"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">Deposits</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-      </div>
-
       {/* Content */}
-      <main className="flex-1">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="flex-1 pb-20 sm:pb-[4.5rem]">
+        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           {activeTab === 'dashboard' && <PgDashboard />}
           {activeTab === 'rooms' && <PgRooms />}
           {activeTab === 'guests' && <PgGuests />}
@@ -152,14 +114,40 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Sticky Footer */}
-      <footer className="mt-auto border-t border-emerald-100 dark:border-emerald-900 bg-emerald-50/30 dark:bg-emerald-950/10">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <p className="text-center text-xs text-muted-foreground">
-            PG Hostel Manager — Streamlined hostel management
-          </p>
+      {/* Fixed Bottom Navigation — always visible on all screen sizes */}
+      <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-white/95 dark:bg-gray-950/95 backdrop-blur-lg border-t border-emerald-200 dark:border-emerald-800 shadow-[0_-2px_16px_rgba(0,0,0,0.12)]">
+        <div className="flex items-center justify-around h-16 px-1">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id
+            const Icon = item.icon
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`
+                  flex flex-col items-center justify-center gap-0.5 py-1.5 px-2 sm:px-3 min-w-[52px] sm:min-w-[56px] rounded-lg
+                  transition-all duration-200 relative
+                  ${isActive
+                    ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:bg-gray-50 dark:active:bg-gray-800'
+                  }
+                `}
+              >
+                {/* Active indicator line */}
+                {isActive && (
+                  <span className="absolute top-0.5 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-emerald-600 dark:bg-emerald-400 rounded-full" />
+                )}
+                <Icon className={`h-[22px] w-[22px] transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
+                <span className={`text-[10px] sm:text-[11px] leading-tight font-semibold ${isActive ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+                  {item.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
-      </footer>
+        {/* iOS safe area padding */}
+        <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
+      </nav>
     </div>
   )
 }

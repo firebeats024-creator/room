@@ -6,7 +6,7 @@ import { getDateComponents } from '@/lib/billing-utils';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, phone, aadhaarNo, emergencyContact, occupation, workLocation, totalMembers, photoLink, roomId, checkInDate, openingMeterReading, ratePerUnit } = body;
+    const { name, phone, aadhaarNo, emergencyContact, occupation, workLocation, totalMembers, photoLink, roomId, checkInDate, openingMeterReading, ratePerUnit, securityDeposit } = body;
 
     // Validate required fields
     if (!name || !roomId || !checkInDate) {
@@ -74,15 +74,21 @@ export async function POST(request: Request) {
         },
       });
 
-      // Create security deposit (1 month rent as deposit)
-      const deposit = await tx.securityDeposit.create({
-        data: {
-          guestId: guest.id,
-          amount: monthlyRent,
-          status: 'Held',
-          notes: 'Initial deposit - 1 month rent',
-        },
-      });
+      // Create security deposit (customizable — defaults to 1 month rent)
+      const parsedDeposit = securityDeposit !== undefined ? parseFloat(securityDeposit) : monthlyRent;
+      const depositAmount = isNaN(parsedDeposit) ? monthlyRent : parsedDeposit;
+      const deposit = depositAmount > 0
+        ? await tx.securityDeposit.create({
+            data: {
+              guestId: guest.id,
+              amount: depositAmount,
+              status: 'Held',
+              notes: depositAmount === monthlyRent
+                ? 'Initial deposit - 1 month rent'
+                : `Initial deposit - ${depositAmount}`,
+            },
+          })
+        : null;
 
       // Create first bill with FULL_MONTH rent
       const effectiveRatePerUnit = ratePerUnit || 10;
@@ -106,6 +112,15 @@ export async function POST(request: Request) {
           totalAmount: monthlyRent,
           dueDate,
           status: 'Unpaid',
+        },
+      });
+
+      // Always create initial electricity reading record (even for 0 — it's a valid reading)
+      await tx.electricityReading.create({
+        data: {
+          guestId: guest.id,
+          reading: effectiveOpeningReading,
+          readingDate: new Date(checkInDate),
         },
       });
 

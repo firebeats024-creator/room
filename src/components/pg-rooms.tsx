@@ -48,13 +48,15 @@ import {
   AlertTriangle,
   CheckCircle2,
   IndianRupee,
+  UserPlus,
+  Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   calculateStayMonths,
-  daysBetween,
   getDateComponents,
   getCurrentBillingPeriod,
+  remainingDaysAfterMonths,
 } from '@/lib/billing-utils'
 
 // ─── Types ───
@@ -106,6 +108,12 @@ interface SecurityDeposit {
   notes: string
 }
 
+interface ElectricityReading {
+  id: string
+  reading: number
+  readingDate: string
+}
+
 interface GuestFull {
   id: string
   name: string
@@ -131,6 +139,7 @@ interface GuestFull {
   }
   securityDeposit: SecurityDeposit | null
   bills: GuestBill[]
+  electricityReadings: ElectricityReading[]
 }
 
 type RoomStatus = 'Vacant' | 'Occupied' | 'Maintenance'
@@ -220,6 +229,34 @@ export default function PGRooms() {
   const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false)
   const [payAmount, setPayAmount] = useState('')
 
+  // Custom Payment dialog state
+  const [customPayOpen, setCustomPayOpen] = useState(false)
+  const [customPayAmount, setCustomPayAmount] = useState('')
+  const [customPaySubmitting, setCustomPaySubmitting] = useState(false)
+  const [customPayTotalOutstanding, setCustomPayTotalOutstanding] = useState(0)
+
+  // Electricity update dialog state
+  const [elecUpdateOpen, setElecUpdateOpen] = useState(false)
+  const [elecNewReading, setElecNewReading] = useState('')
+  const [elecSubmitting, setElecSubmitting] = useState(false)
+
+  // Check-in dialog state
+  const [checkInOpen, setCheckInOpen] = useState(false)
+  const [checkInRoom, setCheckInRoom] = useState<Room | null>(null)
+  const [checkInSubmitting, setCheckInSubmitting] = useState(false)
+  const [ciName, setCiName] = useState('')
+  const [ciPhone, setCiPhone] = useState('')
+  const [ciAadhaar, setCiAadhaar] = useState('')
+  const [ciEmergency, setCiEmergency] = useState('')
+  const [ciOccupation, setCiOccupation] = useState('')
+  const [ciWorkLoc, setCiWorkLoc] = useState('')
+  const [ciMembers, setCiMembers] = useState('1')
+  const [ciPhotoLink, setCiPhotoLink] = useState('')
+  const [ciDate, setCiDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [ciMeterReading, setCiMeterReading] = useState('')
+  const [ciRatePerUnit, setCiRatePerUnit] = useState('10')
+  const [ciDeposit, setCiDeposit] = useState('')
+
   // ─── Fetch rooms ───
 
   const fetchRooms = useCallback(async () => {
@@ -293,6 +330,72 @@ export default function PGRooms() {
       toast.error(message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // ─── Check-in from vacant room ───
+
+  const openCheckIn = (room: Room) => {
+    setCheckInRoom(room)
+    setCiName('')
+    setCiPhone('')
+    setCiAadhaar('')
+    setCiEmergency('')
+    setCiOccupation('')
+    setCiWorkLoc('')
+    setCiMembers('1')
+    setCiPhotoLink('')
+    setCiDate(new Date().toISOString().split('T')[0])
+    setCiMeterReading('')
+    setCiRatePerUnit('10')
+    setCiDeposit(String(room.monthlyRent))
+    setCheckInOpen(true)
+  }
+
+  const handleCheckIn = async () => {
+    if (!checkInRoom) return
+    if (!ciName.trim()) {
+      toast.error('Guest name is required')
+      return
+    }
+
+    setCheckInSubmitting(true)
+    try {
+      const res = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: ciName.trim(),
+          phone: ciPhone.trim(),
+          aadhaarNo: ciAadhaar.trim(),
+          emergencyContact: ciEmergency.trim(),
+          occupation: ciOccupation.trim(),
+          workLocation: ciWorkLoc.trim(),
+          totalMembers: parseInt(ciMembers) || 1,
+          photoLink: ciPhotoLink.trim(),
+          roomId: checkInRoom.id,
+          checkInDate: ciDate,
+          openingMeterReading: parseFloat(ciMeterReading) || 0,
+          ratePerUnit: parseFloat(ciRatePerUnit) || 10,
+          ...(ciDeposit !== '' ? { securityDeposit: parseFloat(ciDeposit) || 0 } : {}),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Check-in failed')
+      }
+
+      toast.success(`${ciName} checked into Room ${checkInRoom.roomNo}!`)
+      setCheckInOpen(false)
+      setCheckInRoom(null)
+      fetchRooms()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Check-in failed'
+      toast.error(message)
+    } finally {
+      setCheckInSubmitting(false)
     }
   }
 
@@ -384,10 +487,110 @@ export default function PGRooms() {
     }
   }
 
+  // ─── Custom Payment handlers ───
+
+  const openCustomPay = (totalOutstanding: number) => {
+    setCustomPayTotalOutstanding(totalOutstanding)
+    setCustomPayAmount('')
+    setCustomPayOpen(true)
+  }
+
+  const handleCustomPay = async () => {
+    if (!guestDetail) return
+    const amount = parseFloat(customPayAmount) || 0
+    if (amount <= 0) {
+      toast.error('Enter a valid payment amount')
+      return
+    }
+
+    setCustomPaySubmitting(true)
+    try {
+      const res = await fetch('/api/bills/custom-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId: guestDetail.id,
+          paymentAmount: amount,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to process payment')
+        return
+      }
+
+      if (data.remainingAfterPayment === 0) {
+        toast.success(`Payment of ${formatCurrency(amount)} recorded — all dues cleared!`)
+      } else {
+        toast.success(`Payment of ${formatCurrency(amount)} recorded! Remaining: ${formatCurrency(data.remainingAfterPayment)}`)
+      }
+
+      setCustomPayOpen(false)
+
+      // Refresh guest details
+      const refreshRes = await fetch(`/api/guests/${guestDetail.id}`)
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes.json()
+        setGuestDetail(refreshed)
+      }
+      fetchRooms()
+    } catch {
+      toast.error('Failed to process payment')
+    } finally {
+      setCustomPaySubmitting(false)
+    }
+  }
+
+  // ─── Electricity Update handlers ───
+
+  const handleElecUpdate = async () => {
+    if (!guestDetail) return
+    const newReading = parseFloat(elecNewReading) || 0
+    if (newReading < 0) {
+      toast.error('Reading must be 0 or more')
+      return
+    }
+
+    setElecSubmitting(true)
+    try {
+      const res = await fetch('/api/electricity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId: guestDetail.id,
+          reading: newReading,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update reading')
+        return
+      }
+
+      toast.success('Electricity reading updated!')
+      setElecUpdateOpen(false)
+
+      // Refresh guest details to reflect updated bill
+      const refreshRes = await fetch(`/api/guests/${guestDetail.id}`)
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes.json()
+        setGuestDetail(refreshed)
+      }
+    } catch {
+      toast.error('Failed to update electricity reading')
+    } finally {
+      setElecSubmitting(false)
+    }
+  }
+
   // ─── Render ───
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30">
+    <div className="bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -618,12 +821,14 @@ export default function PGRooms() {
                     status === 'Occupied'
                       ? 'border-amber-100 hover:border-amber-300 cursor-pointer'
                       : status === 'Vacant'
-                        ? 'border-emerald-100 hover:border-emerald-200'
+                        ? 'border-emerald-100 hover:border-emerald-300 cursor-pointer'
                         : 'border-red-100 hover:border-red-200'
                   }`}
                   onClick={() => {
                     if (status === 'Occupied' && activeGuest) {
                       openGuestDetail(activeGuest.id)
+                    } else if (status === 'Vacant') {
+                      openCheckIn(room)
                     }
                   }}
                 >
@@ -694,11 +899,17 @@ export default function PGRooms() {
                       </div>
                     )}
 
-                    {/* Vacant room indicator */}
+                    {/* Vacant room indicator — clickable to check-in */}
                     {status === 'Vacant' && (
-                      <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 text-center">
-                        <p className="text-xs font-medium text-emerald-600">
-                          Available for check-in
+                      <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-center transition-colors group-hover:bg-emerald-100/70 group-hover:border-emerald-300">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <UserPlus className="size-3.5 text-emerald-600" />
+                          <p className="text-xs font-semibold text-emerald-700">
+                            Click to Check-in
+                          </p>
+                        </div>
+                        <p className="text-[10px] text-emerald-500 mt-0.5">
+                          Available for booking
                         </p>
                       </div>
                     )}
@@ -741,28 +952,44 @@ export default function PGRooms() {
             const isLive = guestDetail.status === 'Live'
             const now = new Date()
             const stayMonths = isLive ? calculateStayMonths(guestDetail.checkInDate, now) : 0
-            const stayDays = isLive ? daysBetween(guestDetail.checkInDate, now) : 0
+            const stayRemainingDays = isLive ? remainingDaysAfterMonths(guestDetail.checkInDate, stayMonths, now) : 0
             const monthlyRent = guestDetail.room.monthlyRent
-            const totalAccruedRent = stayMonths * monthlyRent
 
-            const totalPaid = guestDetail.bills.reduce((sum, b) =>
-              sum + (b.status === 'Paid' ? b.totalAmount : (b.paidAmount || 0)), 0)
-
-            const totalBalance = Math.max(0, totalAccruedRent - totalPaid)
-
+            // ─── Bill-based outstanding calculation ───
+            // Total outstanding = sum of remaining balances on all non-Paid bills
             const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, now) : null
+
+            const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
+
+            // Total paid: sum of all paidAmounts across ALL bills
+            const totalPaid = guestDetail.bills.reduce((sum, b) =>
+              sum + (b.paidAmount || 0), 0)
+
+            // Total outstanding from non-Paid bills
+            const totalOutstanding = unpaidBills.reduce((sum, b) =>
+              sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
+
+            // Current period bill
             const currentPeriodBill = currentPeriod
               ? guestDetail.bills.find((b) => b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
               : null
 
+            // Current month bill: remaining amount for current period
             const currentMonthBill = currentPeriodBill
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
               : (currentPeriod ? monthlyRent : 0)
 
-            const previousDue = Math.max(0, totalBalance - currentMonthBill)
+            // Previous Due: total outstanding minus current period
+            const previousDue = Math.max(0, totalOutstanding - currentMonthBill)
 
-            // Unpaid bills for the Mark Paid feature
-            const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
+            // ─── Electricity details ───
+            // Use ?? instead of || to properly handle 0 as a valid reading
+            const lastElecReading = guestDetail.electricityReadings?.[0] // already ordered desc
+            const prevReading = currentPeriodBill?.previousReading ?? (lastElecReading?.reading ?? 0)
+            const currReading = currentPeriodBill?.currentReading ?? (lastElecReading?.reading ?? 0)
+            const unitsConsumed = currentPeriodBill?.unitsConsumed ?? Math.max(0, currReading - prevReading)
+            const ratePerUnit = currentPeriodBill?.ratePerUnit ?? 10
+            const elecCharge = currentPeriodBill?.electricityCharge ?? (unitsConsumed * ratePerUnit)
 
             return (
               <div className="space-y-4 py-2">
@@ -888,7 +1115,7 @@ export default function PGRooms() {
 
                         <span className="text-muted-foreground">Total Stay</span>
                         <span className="font-semibold text-amber-800">
-                          {stayMonths} Month{stayMonths !== 1 ? 's' : ''} {stayDays} Day{stayDays !== 1 ? 's' : ''}
+                          {stayMonths} Month{stayMonths !== 1 ? 's' : ''}{stayRemainingDays > 0 ? ` ${stayRemainingDays} Day${stayRemainingDays !== 1 ? 's' : ''}` : ''}
                           <span className="text-xs text-muted-foreground font-normal ml-1">(live)</span>
                         </span>
 
@@ -896,7 +1123,7 @@ export default function PGRooms() {
                         <span className="font-medium">{formatCurrency(monthlyRent)}</span>
 
                         <span className="text-muted-foreground">Accrued Rent</span>
-                        <span className="font-medium">{formatCurrency(totalAccruedRent)}
+                        <span className="font-medium">{formatCurrency(stayMonths * monthlyRent)}
                           <span className="text-xs text-muted-foreground ml-1">({stayMonths} × {formatCurrency(monthlyRent)})</span>
                         </span>
 
@@ -924,16 +1151,94 @@ export default function PGRooms() {
 
                       <div className="flex justify-between items-center py-1">
                         <span className="font-bold text-red-800">Total Outstanding</span>
-                        <span className="font-bold text-red-800 text-base">
-                          {formatCurrency(totalBalance)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-red-800 text-base">
+                            {formatCurrency(totalOutstanding)}
+                          </span>
+                          {totalOutstanding > 0 && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openCustomPay(totalOutstanding)
+                              }}
+                            >
+                              <IndianRupee className="h-3 w-3 mr-1" />
+                              Custom Payment
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
-                      {totalBalance === 0 && (
+                      {totalOutstanding === 0 && (
                         <div className="mt-1 flex items-start gap-1.5 text-xs text-emerald-700 bg-emerald-100 p-2 rounded">
                           <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                           <span>All dues cleared — no outstanding balance.</span>
                         </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* ═══ SECTION 2.5: Electricity Details ═══ */}
+                {isLive && (
+                  <Card className="border-yellow-200 bg-yellow-50/30">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold text-yellow-700 flex items-center gap-1.5">
+                          <Zap className="h-4 w-4" />
+                          Electricity Details
+                        </CardTitle>
+                        <Button
+                          size="sm"
+                          className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs h-7"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setElecNewReading(String(currReading ?? prevReading ?? 0))
+                            setElecUpdateOpen(true)
+                          }}
+                        >
+                          <Zap className="h-3 w-3 mr-1" />
+                          Update Reading
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 text-sm">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Previous Reading</p>
+                          <p className="text-lg font-bold text-gray-800">{prevReading}</p>
+                        </div>
+                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Current Reading</p>
+                          <p className="text-lg font-bold text-gray-800">{currReading}</p>
+                        </div>
+                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Units Consumed</p>
+                          <p className="text-lg font-bold text-amber-700">{unitsConsumed}</p>
+                        </div>
+                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Rate / Unit</p>
+                          <p className="text-lg font-bold text-gray-800">{formatCurrency(ratePerUnit)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between rounded-lg border border-yellow-300 bg-yellow-100/70 p-3">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-yellow-600" />
+                          <span className="font-semibold text-yellow-800">Electricity Charge</span>
+                        </div>
+                        <span className="text-lg font-bold text-yellow-800">
+                          {formatCurrency(elecCharge)}
+                          <span className="text-xs font-normal text-muted-foreground ml-1">
+                            ({unitsConsumed} × {formatCurrency(ratePerUnit)})
+                          </span>
+                        </span>
+                      </div>
+                      {lastElecReading && (
+                        <p className="mt-2 text-[10px] text-muted-foreground">
+                          Last reading: {lastElecReading.reading} on {formatDate(lastElecReading.readingDate)}
+                        </p>
                       )}
                     </CardContent>
                   </Card>
@@ -1033,6 +1338,251 @@ export default function PGRooms() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setGuestDetailOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ CHECK-IN DIALOG (from vacant room click) ═══════════ */}
+      <Dialog open={checkInOpen} onOpenChange={setCheckInOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-800">
+              <UserPlus className="size-5" />
+              Check-in Guest
+              {checkInRoom && (
+                <Badge variant="outline" className="ml-2 border-emerald-200 text-emerald-700">
+                  Room {checkInRoom.roomNo}
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Fill in guest details to check them into this room
+            </DialogDescription>
+          </DialogHeader>
+
+          {checkInRoom && (
+            <div className="space-y-4 py-2">
+              {/* Room Info Summary */}
+              <Card className="border-emerald-200 bg-emerald-50/30">
+                <CardContent className="p-3 flex items-center gap-3 text-sm">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-100">
+                    <Bed className="size-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-emerald-800">Room {checkInRoom.roomNo} — {checkInRoom.type}</p>
+                    <p className="text-xs text-emerald-600">
+                      Floor {checkInRoom.floor} &middot; Rent: {formatCurrency(checkInRoom.monthlyRent)}/month
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="ciName">
+                    Guest Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="ciName"
+                    placeholder="Full name"
+                    value={ciName}
+                    onChange={(e) => setCiName(e.target.value)}
+                    className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciPhone">Phone</Label>
+                    <Input
+                      id="ciPhone"
+                      placeholder="Mobile number"
+                      value={ciPhone}
+                      onChange={(e) => setCiPhone(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciAadhaar">Aadhaar No</Label>
+                    <Input
+                      id="ciAadhaar"
+                      placeholder="Aadhaar number"
+                      value={ciAadhaar}
+                      onChange={(e) => setCiAadhaar(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciOccupation">Occupation</Label>
+                    <Input
+                      id="ciOccupation"
+                      placeholder="Job / Work"
+                      value={ciOccupation}
+                      onChange={(e) => setCiOccupation(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciWorkLoc">Work Location</Label>
+                    <Input
+                      id="ciWorkLoc"
+                      placeholder="Office / Area"
+                      value={ciWorkLoc}
+                      onChange={(e) => setCiWorkLoc(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciEmergency">Emergency Contact</Label>
+                    <Input
+                      id="ciEmergency"
+                      placeholder="Name & Phone"
+                      value={ciEmergency}
+                      onChange={(e) => setCiEmergency(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciMembers">Total Members</Label>
+                    <Input
+                      id="ciMembers"
+                      type="number"
+                      min="1"
+                      value={ciMembers}
+                      onChange={(e) => setCiMembers(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="ciPhotoLink">Photo Link</Label>
+                  <Input
+                    id="ciPhotoLink"
+                    placeholder="URL to guest photo (optional)"
+                    value={ciPhotoLink}
+                    onChange={(e) => setCiPhotoLink(e.target.value)}
+                    className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                  />
+                </div>
+
+                <Separator className="my-1" />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciDate">
+                      Check-in Date <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="ciDate"
+                      type="date"
+                      value={ciDate}
+                      onChange={(e) => setCiDate(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciMeterReading">Opening Meter Reading</Label>
+                    <Input
+                      id="ciMeterReading"
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={ciMeterReading}
+                      onChange={(e) => setCiMeterReading(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciRatePerUnit">Rate per Unit (₹)</Label>
+                    <Input
+                      id="ciRatePerUnit"
+                      type="number"
+                      min="0"
+                      value={ciRatePerUnit}
+                      onChange={(e) => setCiRatePerUnit(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="ciDeposit" className="flex items-center gap-1.5">
+                      <Shield className="size-3.5" />
+                      Security Deposit (₹)
+                    </Label>
+                    <Input
+                      id="ciDeposit"
+                      type="number"
+                      min="0"
+                      placeholder="0 = No deposit"
+                      value={ciDeposit}
+                      onChange={(e) => setCiDeposit(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Set 0 for no deposit</p>
+                  </div>
+                </div>
+
+                {/* Payment Preview */}
+                <Card className="border-emerald-200 bg-emerald-50/30">
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <CreditCard className="size-3.5" />
+                      Payment Preview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Monthly Rent</span>
+                      <span className="font-medium">{formatCurrency(checkInRoom.monthlyRent)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Security Deposit
+                        {parseFloat(ciDeposit) === checkInRoom.monthlyRent && (
+                          <span className="text-[10px] ml-1">(1 month rent)</span>
+                        )}
+                        {parseFloat(ciDeposit) === 0 && (
+                          <span className="text-[10px] ml-1 text-amber-600">(No deposit)</span>
+                        )}
+                      </span>
+                      <span className="font-medium">{formatCurrency(parseFloat(ciDeposit) || 0)}</span>
+                    </div>
+                    <Separator className="my-1.5" />
+                    <div className="flex justify-between font-semibold text-emerald-800">
+                      <span>Total Initial Payment</span>
+                      <span>{formatCurrency(checkInRoom.monthlyRent + (parseFloat(ciDeposit) || 0))}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCheckInOpen(false)} className="border-emerald-200">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCheckIn}
+              disabled={checkInSubmitting || !ciName.trim()}
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              {checkInSubmitting ? 'Checking in...' : (
+                <>
+                  <UserPlus className="mr-1.5 size-4" />
+                  Check-in Guest
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1147,6 +1697,304 @@ export default function PGRooms() {
                 <>
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Confirm Payment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ CUSTOM PAYMENT DIALOG ═══════════ */}
+      <Dialog open={customPayOpen} onOpenChange={setCustomPayOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-800">
+              <IndianRupee className="h-5 w-5" />
+              Custom Payment
+            </DialogTitle>
+            <DialogDescription>
+              Pay any amount — distributed across bills (oldest first)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Outstanding Summary */}
+            <Card className="border-red-200 bg-red-50/50">
+              <CardContent className="p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Outstanding</span>
+                  <span className="font-bold text-red-800 text-base">
+                    {formatCurrency(customPayTotalOutstanding)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Amount */}
+            <div className="space-y-2">
+              <Label htmlFor="customPayAmount">
+                Payment Amount (₹) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="customPayAmount"
+                type="number"
+                min="1"
+                max={customPayTotalOutstanding}
+                placeholder="Enter payment amount"
+                value={customPayAmount}
+                onChange={(e) => setCustomPayAmount(e.target.value)}
+                className="font-mono text-lg border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7 border-emerald-200 text-emerald-700"
+                  onClick={() => setCustomPayAmount(String(customPayTotalOutstanding))}
+                >
+                  Full Amount
+                </Button>
+                {customPayTotalOutstanding > 0 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7 border-emerald-200 text-emerald-700"
+                      onClick={() => setCustomPayAmount(String(Math.ceil(customPayTotalOutstanding / 2)))}
+                    >
+                      Half
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Payment Preview */}
+            {(() => {
+              const amt = parseFloat(customPayAmount) || 0
+              if (amt <= 0 || !guestDetail) return null
+
+              const effectiveAmt = Math.min(amt, customPayTotalOutstanding)
+              const remainingAfter = customPayTotalOutstanding - effectiveAmt
+
+              // Simulate FIFO allocation
+              const sortedBills = [...guestDetail.bills]
+                .filter((b) => b.status !== 'Paid')
+                .sort((a, b) => {
+                  if (a.billingYear !== b.billingYear) return a.billingYear - b.billingYear
+                  return a.billingMonth - b.billingMonth
+                })
+
+              let simRemaining = effectiveAmt
+              const allocationPreview: { month: string; allocated: number; billRemaining: number }[] = []
+
+              for (const bill of sortedBills) {
+                if (simRemaining <= 0) break
+                const billRem = bill.totalAmount - (bill.paidAmount || 0)
+                if (billRem <= 0) continue
+                const payForThis = Math.min(simRemaining, billRem)
+                allocationPreview.push({
+                  month: `${MONTH_NAMES[bill.billingMonth - 1]} ${bill.billingYear}`,
+                  allocated: payForThis,
+                  billRemaining: billRem - payForThis,
+                })
+                simRemaining -= payForThis
+              }
+
+              return (
+                <Card className="border-emerald-200 bg-emerald-50/30">
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <CreditCard className="size-3.5" />
+                      Payment Allocation Preview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-1.5 text-sm">
+                    {allocationPreview.map((item, i) => (
+                      <div key={i} className="flex justify-between items-center">
+                        <span className="text-muted-foreground text-xs">
+                          → {item.month}
+                        </span>
+                        <span className="font-medium text-xs">
+                          {formatCurrency(item.allocated)}
+                          {item.billRemaining > 0 && (
+                            <span className="text-amber-700 ml-1">
+                              ({formatCurrency(item.billRemaining)} left)
+                            </span>
+                          )}
+                          {item.billRemaining === 0 && (
+                            <span className="text-emerald-700 ml-1">✓ Paid</span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                    <Separator className="my-1.5" />
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-xs">You Pay</span>
+                      <span className="font-bold text-emerald-800">{formatCurrency(effectiveAmt)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className={`font-semibold text-xs ${remainingAfter > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                        Remaining Due
+                      </span>
+                      <span className={`font-bold ${remainingAfter > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                        {formatCurrency(remainingAfter)}
+                      </span>
+                    </div>
+                    {remainingAfter === 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-100 p-1.5 rounded mt-1">
+                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                        <span>All dues will be cleared!</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })()}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setCustomPayOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCustomPay}
+              disabled={customPaySubmitting || !customPayAmount || parseFloat(customPayAmount) <= 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {customPaySubmitting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Confirm Payment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ ELECTRICITY UPDATE DIALOG ═══════════ */}
+      <Dialog open={elecUpdateOpen} onOpenChange={setElecUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-yellow-700">
+              <Zap className="h-5 w-5" />
+              Update Electricity Reading
+            </DialogTitle>
+            <DialogDescription>
+              Enter the current meter reading — units & charge will auto-calculate
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {guestDetail && (() => {
+              const bill = guestDetail.bills.find((b) => {
+                if (!guestDetail) return false
+                const now = new Date()
+                const period = getCurrentBillingPeriod(guestDetail.checkInDate, now)
+                return period && b.billingMonth === period.month && b.billingYear === period.year
+              })
+              const lastElec = guestDetail.electricityReadings?.[0]
+              // Use ?? to properly handle 0 as a valid reading
+              const previousRd = bill?.previousReading ?? (lastElec?.reading ?? 0)
+              const rate = bill?.ratePerUnit ?? 10
+              const newRd = parseFloat(elecNewReading) || 0
+              const units = Math.max(0, newRd - previousRd)
+              const charge = units * rate
+
+              return (
+                <>
+                  {/* Current Reading Summary */}
+                  <Card className="border-yellow-200 bg-yellow-50/50">
+                    <CardContent className="p-4 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Previous Reading</span>
+                        <span className="font-medium">{previousRd}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rate per Unit</span>
+                        <span className="font-medium">{formatCurrency(rate)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* New Reading Input */}
+                  <div className="space-y-2">
+                    <Label htmlFor="elecNewReading">
+                      New Meter Reading <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="elecNewReading"
+                      type="number"
+                      min={previousRd}
+                      placeholder="Enter current meter reading"
+                      value={elecNewReading}
+                      onChange={(e) => setElecNewReading(e.target.value)}
+                      className="font-mono text-lg border-yellow-200 focus-visible:border-yellow-400 focus-visible:ring-yellow-400/30"
+                    />
+                  </div>
+
+                  {/* Auto-calculated Preview */}
+                  {newRd > previousRd && (
+                    <Card className="border-emerald-200 bg-emerald-50/30">
+                      <CardHeader className="pb-1 pt-3 px-4">
+                        <CardTitle className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                          <Zap className="size-3.5" />
+                          Auto-calculated Preview
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3 space-y-1.5 text-sm">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground text-xs">Units Consumed</span>
+                          <span className="font-medium text-xs">{units} ({newRd} − {previousRd})</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground text-xs">Electricity Charge</span>
+                          <span className="font-medium text-xs">{formatCurrency(charge)} ({units} × {formatCurrency(rate)})</span>
+                        </div>
+                        <Separator className="my-1.5" />
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-xs">Added to Bill</span>
+                          <span className="font-bold text-emerald-800">{formatCurrency(charge)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {newRd > 0 && newRd < previousRd && (
+                    <div className="flex items-center gap-1.5 text-xs text-red-700 bg-red-100 p-2 rounded">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>New reading ({newRd}) cannot be less than previous ({previousRd})</span>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setElecUpdateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleElecUpdate}
+              disabled={elecSubmitting || !elecNewReading || parseFloat(elecNewReading) < 0}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white"
+            >
+              {elecSubmitting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Update Reading
                 </>
               )}
             </Button>
