@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  roomNo    String   @unique
+  floor     Int      @default(1)
+  type      String   @default("Single") // Single, Double, Triple
+  monthlyRent Float   @default(5000)
+  status    String   @default("Vacant") // Vacant, Occupied, Maintenance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guests    Guest[]
+  bills     Bill[]
+}
+
+model Guest {
+  id              String   @id @default(cuid())
+  name            String
+  phone           String   @default("")
+  aadhaarNo       String   @default("")
+  emergencyContact String  @default("")
+  occupation      String   @default("")
+  workLocation    String   @default("")
+  totalMembers    Int      @default(1)
+  photoLink       String   @default("")
+  roomId          String
+  checkInDate     DateTime
+  checkOutDate    DateTime?
+  billingCycleDate Int     // The date of month when billing triggers (same as check-in day)
+  status          String   @default("Live") // Live, Checked-out
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  room            Room     @relation(fields: [roomId], references: [id])
+  securityDeposit SecurityDeposit?
+  bills           Bill[]
+  electricityReadings ElectricityReading[]
+}
+
+model SecurityDeposit {
+  id          String   @id @default(cuid())
+  guestId     String   @unique
+  amount      Float
+  status      String   @default("Held") // Held, Refunded, Partially-Refunded, Adjusted
+  deductedAmount Float  @default(0)
+  refundDate  DateTime?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guest       Guest    @relation(fields: [guestId], references: [id])
+}
+
+model Bill {
+  id               String   @id @default(cuid())
+  guestId          String
+  roomId           String
+  billingMonth     Int      // 1-12
+  billingYear      Int      // e.g., 2025
+  rentAmount       Float
+  electricityCharge Float   @default(0)
+  previousReading  Float   @default(0)
+  currentReading   Float   @default(0)
+  unitsConsumed    Float   @default(0)
+  ratePerUnit      Float   @default(10)
+  minChargePolicy  String   @default("FULL_MONTH") // FULL_MONTH, PRO_RATA
+  manualAdjustment Float   @default(0) // positive = extra charge, negative = discount
+  adjustmentReason String   @default("")
+  isCustomBill     Boolean  @default(false)
+  customTotal      Float?
+  totalAmount      Float
+  paidAmount      Float    @default(0) // Amount paid so far (for partial payments)
+  dueDate          DateTime
+  paidDate        DateTime?
+  status          String   @default("Unpaid") // Unpaid, Paid, Overdue, Partially-Paid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  guest           Guest    @relation(fields: [guestId], references: [id])
+  room            Room     @relation(fields: [roomId], references: [id])
+}
+
+model ElectricityReading {
+  id          String   @id @default(cuid())
+  guestId     String
+  reading     Float
+  readingDate DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  guest       Guest    @relation(fields: [guestId], references: [id])
+}
