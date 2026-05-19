@@ -75,23 +75,108 @@ export async function GET(
       });
     }
 
-    // ─── REPAIR: Fix bills with previousReading=0 that should have the opening reading ───
-    // If the first bill has previousReading=0 but ElectricityReading has a non-zero reading, fix it
-    const firstBill = guest.bills[0];
-    if (firstBill && firstBill.previousReading === 0 && guest.electricityReadings.length > 0) {
-      const lastReading = guest.electricityReadings[0]; // ordered desc
-      if (lastReading.reading > 0) {
-        // The first bill's previousReading should be the opening reading at check-in
-        // Find the reading closest to check-in date
-        const checkInReading = await db.electricityReading.findFirst({
-          where: { guestId: guest.id, readingDate: { lte: new Date(guest.checkInDate) } },
-          orderBy: { readingDate: 'desc' },
-        });
-        if (checkInReading) {
+    // ─── REPAIR: Fix broken electricity reading chain across ALL bills ───
+    // Walk the entire bill chain and ensure each bill's previousReading matches
+    // the previous bill's currentReading. Fix any breaks found.
+    if (guest.bills.length > 0) {
+      // Determine the correct opening reading (from first ElectricityReading at check-in)
+      const checkInReading = await db.electricityReading.findFirst({
+        where: { guestId: guest.id, readingDate: { lte: new Date(guest.checkInDate) } },
+        orderBy: { readingDate: 'desc' },
+      });
+      const correctOpening = checkInReading?.reading ?? guest.bills[0]?.previousReading ?? 0;
+
+      let expectedPreviousReading = correctOpening;
+      let chainFixed = false;
+
+      for (const bill of guest.bills) {
+        const needsFix = bill.previousReading !== expectedPreviousReading;
+        let newCurrentReading = bill.currentReading;
+
+        // If currentReading equals the OLD previousReading and no electricity
+        // update was done for this period (unitsConsumed === 0), then currentReading
+        // should also be fixed to the new previousReading
+        if (bill.currentReading === bill.previousReading && bill.unitsConsumed === 0) {
+          newCurrentReading = expectedPreviousReading;
+        }
+
+        const newUnitsConsumed = Math.max(0, newCurrentReading - expectedPreviousReading);
+        const newElecCharge = newUnitsConsumed * (bill.ratePerUnit ?? 10);
+
+        // For custom bills, don't recalculate totalAmount — keep customTotal
+        let newTotalAmount: number;
+        if (bill.isCustomBill && bill.customTotal !== null && bill.customTotal !== undefined) {
+          newTotalAmount = bill.customTotal;
+        } else {
+          newTotalAmount = bill.rentAmount + newElecCharge + bill.manualAdjustment;
+        }
+
+        if (needsFix || newCurrentReading !== bill.currentReading ||
+            newUnitsConsumed !== bill.unitsConsumed || newElecCharge !== bill.electricityCharge) {
           await db.bill.update({
-            where: { id: firstBill.id },
-            data: { previousReading: checkInReading.reading },
+            where: { id: bill.id },
+            data: {
+              previousReading: expectedPreviousReading,
+              currentReading: newCurrentReading,
+              unitsConsumed: newUnitsConsumed,
+              electricityCharge: newElecCharge,
+              totalAmount: newTotalAmount,
+            },
           });
+          chainFixed = true;
+        }
+
+        // Chain: next bill's previousReading = this bill's currentReading
+        expectedPreviousReading = newCurrentReading;
+      }
+
+      // Re-fetch if chain was fixed
+      if (chainFixed) {
+        const repairedGuest = await db.guest.findUnique({
+          where: { id },
+          include: {
+            room: {
+              select: {
+                id: true,
+                roomNo: true,
+                floor: true,
+                type: true,
+                monthlyRent: true,
+                status: true,
+              },
+            },
+            securityDeposit: true,
+            bills: {
+              select: {
+                id: true,
+                totalAmount: true,
+                paidAmount: true,
+                status: true,
+                rentAmount: true,
+                electricityCharge: true,
+                billingMonth: true,
+                billingYear: true,
+                dueDate: true,
+                previousReading: true,
+                currentReading: true,
+                unitsConsumed: true,
+                ratePerUnit: true,
+                isCustomBill: true,
+                customTotal: true,
+                manualAdjustment: true,
+                adjustmentReason: true,
+              },
+              orderBy: [{ billingYear: 'asc' }, { billingMonth: 'asc' }],
+            },
+            electricityReadings: {
+              orderBy: { readingDate: 'desc' },
+              take: 1,
+            },
+          },
+        });
+        if (repairedGuest) {
+          // Replace the guest data for further processing
+          Object.assign(guest, repairedGuest);
         }
       }
     }

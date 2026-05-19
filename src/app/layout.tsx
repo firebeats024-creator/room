@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,23 +13,30 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
-  title: "PG Hostel Manager - Smart Billing & Guest Management",
-  description: "Streamlined PG hostel management with full-month billing, security deposits, electricity tracking, and manager overrides.",
-  keywords: ["PG Hostel", "Hostel Management", "Billing", "Guest Management", "Security Deposit", "Rent Collection"],
-  authors: [{ name: "PG Hostel Manager" }],
+  title: "Room Rent - Smart Billing & Guest Management",
+  description: "Streamlined room rent management with full-month billing, security deposits, electricity tracking, and manager overrides.",
+  keywords: ["Room Rent", "Rent Management", "Billing", "Guest Management", "Security Deposit", "Rent Collection"],
+  authors: [{ name: "Room Rent" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
-    title: "PG Hostel Manager",
-    description: "Smart billing & guest management for PG hostels",
+    title: "Room Rent",
+    description: "Smart billing & guest management for room rent",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PG Hostel Manager",
-    description: "Smart billing & guest management for PG hostels",
+    title: "Room Rent",
+    description: "Smart billing & guest management for room rent",
   },
 };
 
@@ -39,7 +46,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

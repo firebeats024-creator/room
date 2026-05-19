@@ -19,8 +19,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Receipt, RefreshCw, CheckCircle2, AlertCircle, Clock, Pencil, DollarSign,
-  AlertTriangle, Info, Zap, FilePlus2, Users, Calendar, ShieldCheck, TrendingDown,
-  Timer, Calculator, Database,
+  AlertTriangle, Info, Zap, Users, Calendar, ShieldCheck, TrendingDown,
+  Timer, Calculator, FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -159,11 +159,17 @@ interface GuestBucketInfo {
 export default function PgBilling() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receiptDownloading, setReceiptDownloading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [guestFilter, setGuestFilter] = useState<'all' | 'live' | 'old'>('all');
-  const [generating, setGenerating] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [liveDate] = useState(() => new Date()); // Live system date, set once on mount
+  const [liveDate] = useState(() => {
+    // IMPORTANT: Use local-time date string to avoid UTC/local mismatch
+    // When new Date() is passed to getDateComponents (which uses UTC methods),
+    // the UTC day may differ from the local day (e.g., 12:30 AM IST = 7:00 PM UTC previous day)
+    const d = new Date();
+    const localStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return localStr; // Store as YYYY-MM-DD string (local time)
+  }); // Live system date, set once on mount
 
   // Edit bill dialog
   const [editOpen, setEditOpen] = useState(false);
@@ -296,8 +302,8 @@ export default function PgBilling() {
     const gs = guestSummary[key];
     // For checked-out guests, use checkOutDate; for live guests, use liveDate
     const referenceDate = gs.guestStatus === 'Checked-out' && gs.checkOutDate
-      ? new Date(gs.checkOutDate)
-      : liveDate;
+      ? gs.checkOutDate // String date — parseDateSafe handles it
+      : liveDate; // Already a local-time YYYY-MM-DD string
     gs.daysStayed = daysBetween(gs.checkInDate, referenceDate);
     gs.stayMonths = calculateStayMonths(gs.checkInDate, referenceDate);
 
@@ -307,8 +313,8 @@ export default function PgBilling() {
     // Determine current billing period
     // For checked-out guests, use checkOutDate as reference; for live guests, use liveDate
     const periodReferenceDate = gs.guestStatus === 'Checked-out' && gs.checkOutDate
-      ? new Date(gs.checkOutDate)
-      : liveDate;
+      ? gs.checkOutDate // String date
+      : liveDate; // Local-time YYYY-MM-DD string
     const currentPeriod = getCurrentBillingPeriod(gs.checkInDate, periodReferenceDate);
     if (currentPeriod) {
       gs.currentBillMonth = currentPeriod.month;
@@ -394,44 +400,27 @@ export default function PgBilling() {
     };
   }
 
-  // ---------- Generate bills ----------
+  // ---------- Download Receipt ----------
 
-  const handleGenerateBills = async () => {
+  const handleDownloadReceipt = async (billId: string) => {
+    setReceiptDownloading(billId);
     try {
-      setGenerating(true);
-      const res = await fetch('/api/bills/generate', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to generate bills');
-        return;
-      }
-      toast.success(data.message);
-      fetchBills();
+      const res = await fetch(`/api/receipt/${billId}`);
+      if (!res.ok) throw new Error('Failed to download receipt');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `receipt-${billId.substring(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Receipt downloaded!');
     } catch {
-      toast.error('Failed to generate bills');
+      toast.error('Failed to download receipt');
     } finally {
-      setGenerating(false);
-    }
-  };
-
-  // ---------- Reset & Seed ----------
-
-  const handleResetSeed = async () => {
-    try {
-      setSeeding(true);
-      const seedRes = await fetch('/api/seed', { method: 'POST' });
-      const seedData = await seedRes.json();
-      if (!seedRes.ok) {
-        toast.error(seedData.error || 'Failed to reset');
-        return;
-      }
-      const d = seedData.deleted;
-      toast.success(`All data cleared! ${d.guests} guests, ${d.bills} bills, ${d.rooms} rooms removed`);
-      fetchBills();
-    } catch {
-      toast.error('Failed to reset data');
-    } finally {
-      setSeeding(false);
+      setReceiptDownloading(null);
     }
   };
 
@@ -624,7 +613,7 @@ export default function PgBilling() {
   };
 
   // Format live date for display
-  const liveDateStr = formatDate(liveDate.toISOString());
+  const liveDateStr = formatDate(liveDate);
 
   // ---------- Render ----------
 
@@ -641,36 +630,6 @@ export default function PgBilling() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={handleResetSeed}
-            variant="outline"
-            size="sm"
-            disabled={seeding}
-            className="gap-1.5 border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400"
-          >
-            {seeding ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Database className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Reset Data</span>
-            <span className="sm:hidden">Reset</span>
-          </Button>
-          <Button
-            onClick={handleGenerateBills}
-            variant="outline"
-            size="sm"
-            disabled={generating}
-            className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400"
-          >
-            {generating ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <FilePlus2 className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Generate Bills</span>
-            <span className="sm:hidden">Generate</span>
-          </Button>
           <Button
             onClick={fetchBills}
             variant="outline"
@@ -1243,6 +1202,12 @@ export default function PgBilling() {
                         <TableCell><StatusBadge status={bill.status} /></TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <Button variant="ghost" size="sm" onClick={() => handleDownloadReceipt(bill.id)}
+                              disabled={receiptDownloading === bill.id}
+                              className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
+                              title="Download Receipt">
+                              <FileDown className={`h-3.5 w-3.5 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
+                            </Button>
                             <Button variant="ghost" size="sm" onClick={() => openEditDialog(bill)}
                               className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
                               title="Edit Bill">

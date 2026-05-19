@@ -157,6 +157,11 @@ export function daysBetween(
  * Calculate remaining days after accounting for complete months.
  * Useful for displaying "2 Months 3 Days" instead of "2 Months 62 Days".
  *
+ * IMPORTANT: Uses Date.UTC for ALL date arithmetic to avoid timezone shift bugs.
+ * The previous version used `new Date(year, month, 0).getUTCDate()` which mixes
+ * local-time construction with UTC reading — this causes off-by-one errors in
+ * timezones like IST (UTC+5:30) where midnight local != midnight UTC.
+ *
  * @param checkInDate - Check-in date
  * @param stayMonths - Number of complete billable months (from calculateStayMonths)
  * @param referenceDate - Reference date (defaults to current date)
@@ -169,8 +174,8 @@ export function remainingDaysAfterMonths(
 ): number {
   const checkIn = getDateComponents(checkInDate);
   const ref = referenceDate
-    ? parseDateSafe(referenceDate)
-    : new Date();
+    ? getDateComponents(referenceDate)
+    : getDateComponents(new Date());
 
   // Find the anniversary date after `stayMonths` complete months
   // e.g., check-in 15/03 + 2 months = 15/05
@@ -180,17 +185,22 @@ export function remainingDaysAfterMonths(
     anniversaryMonth -= 12;
     anniversaryYear++;
   }
-  // Handle day overflow (e.g., 31st in a 30-day month)
-  const maxDayInMonth = new Date(anniversaryYear, anniversaryMonth, 0).getUTCDate();
+  // Handle day overflow (e.g., 31st in a 30-day month) — use Date.UTC for consistency
+  const maxDayInMonth = new Date(Date.UTC(anniversaryYear, anniversaryMonth, 0)).getUTCDate();
   const anniversaryDay = Math.min(checkIn.day, maxDayInMonth);
 
-  const anniversary = new Date(Date.UTC(anniversaryYear, anniversaryMonth - 1, anniversaryDay));
-  const refUTC = new Date(Date.UTC(
-    ref instanceof Date ? ref.getUTCFullYear() : ref.getFullYear(),
-    ref instanceof Date ? ref.getUTCMonth() : ref.getMonth(),
-    ref instanceof Date ? ref.getUTCDate() : ref.getDate()
-  ));
+  const anniversaryUTC = Date.UTC(anniversaryYear, anniversaryMonth - 1, anniversaryDay);
+  const refUTC = Date.UTC(ref.year, ref.month - 1, ref.day);
 
-  const diffMs = refUTC.getTime() - anniversary.getTime();
-  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+  const diffDays = Math.round((refUTC - anniversaryUTC) / (1000 * 60 * 60 * 24));
+
+  // If negative or zero, we're at or before the anniversary — no extra days
+  if (diffDays <= 0) return 0;
+
+  // Safety: if days >= 28, it means we've crossed into another month.
+  // This shouldn't happen with correct stayMonths, but guard against it
+  // by capping at the days in the current billing month minus 1
+  // (max days before the next anniversary)
+  const daysInCurrentMonth = new Date(Date.UTC(anniversaryYear, anniversaryMonth, 0)).getUTCDate();
+  return Math.min(diffDays, daysInCurrentMonth - 1);
 }

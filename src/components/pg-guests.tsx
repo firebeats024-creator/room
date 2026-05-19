@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import {
   calculateStayMonths,
+  remainingDaysAfterMonths,
   daysBetween,
   getDateComponents,
   getCurrentBillingPeriod,
@@ -1324,9 +1325,11 @@ export default function PgGuests() {
           {detailsGuest && (() => {
             // ─── Billing calculations (only used for Live guests) ───
             const isLive = detailsGuest.status === 'Live';
-            const now = new Date();
-            const stayMonths = isLive ? calculateStayMonths(detailsGuest.checkInDate, now) : 0;
-            const stayDays = isLive ? daysBetween(detailsGuest.checkInDate, now) : 0;
+            // Use local-time date string to avoid UTC/local mismatch
+            const nowLocal = new Date();
+            const nowLocalStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+            const stayMonths = isLive ? calculateStayMonths(detailsGuest.checkInDate, nowLocalStr) : 0;
+            const stayRemainingDays = isLive ? remainingDaysAfterMonths(detailsGuest.checkInDate, stayMonths, nowLocalStr) : 0;
             const monthlyRent = detailsGuest.room.monthlyRent;
             const totalAccruedRent = stayMonths * monthlyRent;
 
@@ -1338,7 +1341,7 @@ export default function PgGuests() {
             const totalBalance = Math.max(0, totalAccruedRent - totalPaid);
 
             // Current period billing
-            const currentPeriod = isLive ? getCurrentBillingPeriod(detailsGuest.checkInDate, now) : null;
+            const currentPeriod = isLive ? getCurrentBillingPeriod(detailsGuest.checkInDate, nowLocalStr) : null;
 
             // Find the bill for the current period (if it exists)
             const currentPeriodBill = currentPeriod
@@ -1363,8 +1366,8 @@ export default function PgGuests() {
                       Guest Profile Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-2 text-sm">
-                    <div className="grid grid-cols-[130px_1fr] gap-y-2.5">
+                  <CardContent className="px-3 sm:px-4 pb-4 space-y-2 text-sm">
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2.5 sm:grid-cols-[130px_1fr]">
                       {/* Guest Name */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" />
@@ -1501,8 +1504,8 @@ export default function PgGuests() {
                         {/* Total Stay */}
                         <span className="text-muted-foreground">Total Stay</span>
                         <span className="font-semibold text-amber-800 dark:text-amber-300">
-                          {stayMonths} Month{stayMonths !== 1 ? 's' : ''} {stayDays} Day{stayDays !== 1 ? 's' : ''}
-                          <span className="text-xs text-muted-foreground font-normal ml-1">(calculated live)</span>
+                          {stayMonths} Month{stayMonths !== 1 ? 's' : ''}{stayRemainingDays > 0 ? ` ${stayRemainingDays} Day${stayRemainingDays !== 1 ? 's' : ''}` : ''}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">(live)</span>
                         </span>
 
                         {/* Monthly Rent */}

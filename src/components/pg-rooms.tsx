@@ -50,6 +50,7 @@ import {
   IndianRupee,
   UserPlus,
   Zap,
+  FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -239,6 +240,9 @@ export default function PGRooms() {
   const [elecUpdateOpen, setElecUpdateOpen] = useState(false)
   const [elecNewReading, setElecNewReading] = useState('')
   const [elecSubmitting, setElecSubmitting] = useState(false)
+
+  // Receipt download state
+  const [receiptDownloading, setReceiptDownloading] = useState<string | null>(null)
 
   // Check-in dialog state
   const [checkInOpen, setCheckInOpen] = useState(false)
@@ -587,6 +591,30 @@ export default function PGRooms() {
     }
   }
 
+  // ─── Download Receipt handler ───
+
+  const handleDownloadReceipt = async (billId: string) => {
+    setReceiptDownloading(billId)
+    try {
+      const res = await fetch(`/api/receipt/${billId}`)
+      if (!res.ok) throw new Error('Failed to download receipt')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `receipt-${billId.substring(0, 8)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Receipt downloaded!')
+    } catch {
+      toast.error('Failed to download receipt')
+    } finally {
+      setReceiptDownloading(null)
+    }
+  }
+
   // ─── Render ───
 
   return (
@@ -932,9 +960,10 @@ export default function PGRooms() {
 
       {/* ═══════════ GUEST DETAILS DIALOG ═══════════ */}
       <Dialog open={guestDetailOpen} onOpenChange={setGuestDetailOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-emerald-800">
+            <DialogTitle className="flex items-center gap-2 text-emerald-800">
+              <FileText className="size-5" />
               Guest Details
             </DialogTitle>
             <DialogDescription>
@@ -950,14 +979,19 @@ export default function PGRooms() {
           ) : guestDetail ? (() => {
             // ─── Billing calculations ───
             const isLive = guestDetail.status === 'Live'
-            const now = new Date()
-            const stayMonths = isLive ? calculateStayMonths(guestDetail.checkInDate, now) : 0
-            const stayRemainingDays = isLive ? remainingDaysAfterMonths(guestDetail.checkInDate, stayMonths, now) : 0
+            // IMPORTANT: Use local-time date string to avoid UTC/local mismatch
+            // When new Date() is passed to getDateComponents (which uses UTC methods),
+            // the UTC day may differ from the local day (e.g., 12:30 AM IST = 7:00 PM UTC previous day)
+            // This caused the "2 Months 62 Days" bug where stayMonths was undercounted
+            const nowLocal = new Date()
+            const nowLocalStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`
+            const stayMonths = isLive ? calculateStayMonths(guestDetail.checkInDate, nowLocalStr) : 0
+            const stayRemainingDays = isLive ? remainingDaysAfterMonths(guestDetail.checkInDate, stayMonths, nowLocalStr) : 0
             const monthlyRent = guestDetail.room.monthlyRent
 
             // ─── Bill-based outstanding calculation ───
             // Total outstanding = sum of remaining balances on all non-Paid bills
-            const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, now) : null
+            const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, nowLocalStr) : null
 
             const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
 
@@ -985,24 +1019,41 @@ export default function PGRooms() {
             // ─── Electricity details ───
             // Use ?? instead of || to properly handle 0 as a valid reading
             const lastElecReading = guestDetail.electricityReadings?.[0] // already ordered desc
-            const prevReading = currentPeriodBill?.previousReading ?? (lastElecReading?.reading ?? 0)
-            const currReading = currentPeriodBill?.currentReading ?? (lastElecReading?.reading ?? 0)
+
+            // Opening reading = the reading at check-in time (from the first bill's previousReading)
+            const firstBill = guestDetail.bills[0] || null
+            const openingReading = firstBill?.previousReading ?? lastElecReading?.reading ?? 0
+
+            // For previous reading: prefer current period bill, then last bill's currentReading,
+            // then first bill's previousReading (opening reading), then electricity reading
+            const sortedBills = [...guestDetail.bills].sort((a, b) => {
+              if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
+              return b.billingMonth - a.billingMonth
+            })
+            const lastBill = sortedBills[0] || null
+
+            // Previous reading = the reading at the START of the current billing period
+            // This is always currentPeriodBill.previousReading (set when the bill was created)
+            const prevReading = currentPeriodBill?.previousReading
+              ?? (lastBill?.currentReading ?? lastBill?.previousReading ?? openingReading ?? 0)
+            // Current reading = latest meter reading for this period
+            const currReading = currentPeriodBill?.currentReading ?? (lastElecReading?.reading ?? prevReading)
             const unitsConsumed = currentPeriodBill?.unitsConsumed ?? Math.max(0, currReading - prevReading)
-            const ratePerUnit = currentPeriodBill?.ratePerUnit ?? 10
+            const ratePerUnit = currentPeriodBill?.ratePerUnit ?? (lastBill?.ratePerUnit ?? 10)
             const elecCharge = currentPeriodBill?.electricityCharge ?? (unitsConsumed * ratePerUnit)
 
             return (
-              <div className="space-y-4 py-2">
+              <div className="space-y-3 py-1">
                 {/* ═══ SECTION 1: Guest Profile Information ═══ */}
                 <Card className="border-emerald-200 bg-emerald-50/30">
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
-                      <FileText className="h-4 w-4" />
+                  <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
+                    <CardTitle className="text-xs sm:text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" />
                       Guest Profile Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-2 text-sm">
-                    <div className="grid grid-cols-[120px_1fr] gap-y-2.5">
+                  <CardContent className="px-3 sm:px-4 pb-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2.5 sm:grid-cols-[120px_1fr]">
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" />
                         Guest Name
@@ -1102,20 +1153,23 @@ export default function PGRooms() {
                 {/* ═══ SECTION 2: Live Billing Status ═══ */}
                 {isLive && (
                   <Card className="border-red-200 bg-red-50/30">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold text-red-700 flex items-center gap-1.5">
-                        <CreditCard className="h-4 w-4" />
+                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
+                      <CardTitle className="text-xs sm:text-sm font-semibold text-red-700 flex items-center gap-1.5">
+                        <CreditCard className="h-3.5 w-3.5" />
                         Live Billing Status
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-4 pb-4 space-y-2 text-sm">
-                      <div className="grid grid-cols-[140px_1fr] gap-y-2.5">
+                    <CardContent className="px-3 sm:px-4 pb-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                      <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2.5 sm:grid-cols-[140px_1fr]">
                         <span className="text-muted-foreground">Check-in Date</span>
                         <span className="font-medium">{formatDate(guestDetail.checkInDate)}</span>
 
                         <span className="text-muted-foreground">Total Stay</span>
                         <span className="font-semibold text-amber-800">
                           {stayMonths} Month{stayMonths !== 1 ? 's' : ''}{stayRemainingDays > 0 ? ` ${stayRemainingDays} Day${stayRemainingDays !== 1 ? 's' : ''}` : ''}
+                          {stayRemainingDays > 27 && (
+                            <span className="text-[10px] text-red-500 ml-1">(calc error — days should be &lt; 28)</span>
+                          )}
                           <span className="text-xs text-muted-foreground font-normal ml-1">(live)</span>
                         </span>
 
@@ -1151,21 +1205,22 @@ export default function PGRooms() {
 
                       <div className="flex justify-between items-center py-1">
                         <span className="font-bold text-red-800">Total Outstanding</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-red-800 text-base">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <span className="font-bold text-red-800 text-sm sm:text-base">
                             {formatCurrency(totalOutstanding)}
                           </span>
                           {totalOutstanding > 0 && (
                             <Button
                               size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs h-7 px-2 sm:px-3"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 openCustomPay(totalOutstanding)
                               }}
                             >
-                              <IndianRupee className="h-3 w-3 mr-1" />
-                              Custom Payment
+                              <IndianRupee className="h-3 w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Custom Payment</span>
+                              <span className="sm:hidden">Pay</span>
                             </Button>
                           )}
                         </div>
@@ -1183,58 +1238,62 @@ export default function PGRooms() {
 
                 {/* ═══ SECTION 2.5: Electricity Details ═══ */}
                 {isLive && (
-                  <Card className="border-yellow-200 bg-yellow-50/30">
-                    <CardHeader className="pb-2 pt-4 px-4">
+                  <Card className="border-amber-300 bg-amber-50/20">
+                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-semibold text-yellow-700 flex items-center gap-1.5">
+                        <CardTitle className="text-xs sm:text-sm font-semibold text-amber-700 flex items-center gap-1.5">
                           <Zap className="h-4 w-4" />
                           Electricity Details
                         </CardTitle>
                         <Button
                           size="sm"
-                          className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs h-7"
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] sm:text-xs h-7 px-2 sm:px-3"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setElecNewReading(String(currReading ?? prevReading ?? 0))
+                            setElecNewReading(String(currReading ?? prevReading ?? openingReading ?? 0))
                             setElecUpdateOpen(true)
                           }}
                         >
-                          <Zap className="h-3 w-3 mr-1" />
-                          Update Reading
+                          <Zap className="h-3 w-3 sm:mr-1" />
+                          <span className="hidden sm:inline">Update Reading</span>
+                          <span className="sm:hidden">Update</span>
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent className="px-4 pb-4 text-sm">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
-                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Previous Reading</p>
-                          <p className="text-lg font-bold text-gray-800">{prevReading}</p>
+                    <CardContent className="px-3 sm:px-4 pb-3 text-xs sm:text-sm">
+                      {/* Three input fields: Opening Unit, Ending Unit, Rate/Unit */}
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Opening Unit</Label>
+                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
+                            <span className="text-base sm:text-lg font-bold text-emerald-700">{openingReading}</span>
+                          </div>
                         </div>
-                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
-                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Current Reading</p>
-                          <p className="text-lg font-bold text-gray-800">{currReading}</p>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Ending Unit</Label>
+                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
+                            <span className="text-base sm:text-lg font-bold text-gray-800">{currReading}</span>
+                          </div>
                         </div>
-                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
-                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Units Consumed</p>
-                          <p className="text-lg font-bold text-amber-700">{unitsConsumed}</p>
-                        </div>
-                        <div className="rounded-lg border border-yellow-200 bg-white/70 p-3">
-                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Rate / Unit</p>
-                          <p className="text-lg font-bold text-gray-800">{formatCurrency(ratePerUnit)}</p>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Rate / Unit (₹)</Label>
+                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
+                            <span className="text-base sm:text-lg font-bold text-gray-800">{ratePerUnit}</span>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-3 flex items-center justify-between rounded-lg border border-yellow-300 bg-yellow-100/70 p-3">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-yellow-600" />
-                          <span className="font-semibold text-yellow-800">Electricity Charge</span>
+
+                      {/* Result info bar */}
+                      <div className="mt-2.5 sm:mt-3 flex items-center justify-between rounded-lg bg-amber-100/80 border border-amber-200 px-3 py-2 sm:px-4 sm:py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-amber-600" />
+                          <span className="text-xs sm:text-sm font-semibold text-gray-800">Units: <span className="text-amber-800">{unitsConsumed}</span></span>
                         </div>
-                        <span className="text-lg font-bold text-yellow-800">
-                          {formatCurrency(elecCharge)}
-                          <span className="text-xs font-normal text-muted-foreground ml-1">
-                            ({unitsConsumed} × {formatCurrency(ratePerUnit)})
-                          </span>
-                        </span>
+                        <div className="text-xs sm:text-sm font-bold text-amber-800">
+                          Charge: {formatCurrency(elecCharge)}
+                        </div>
                       </div>
+
                       {lastElecReading && (
                         <p className="mt-2 text-[10px] text-muted-foreground">
                           Last reading: {lastElecReading.reading} on {formatDate(lastElecReading.readingDate)}
@@ -1247,13 +1306,13 @@ export default function PGRooms() {
                 {/* ═══ SECTION 3: Unpaid Bills with Mark Paid ═══ */}
                 {unpaidBills.length > 0 && (
                   <Card className="border-amber-200 bg-amber-50/30">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold text-amber-700 flex items-center gap-1.5">
-                        <IndianRupee className="h-4 w-4" />
+                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
+                      <CardTitle className="text-xs sm:text-sm font-semibold text-amber-700 flex items-center gap-1.5">
+                        <IndianRupee className="h-3.5 w-3.5" />
                         Unpaid Bills ({unpaidBills.length})
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-4 pb-4 space-y-2">
+                    <CardContent className="px-3 sm:px-4 pb-3 space-y-2">
                       {unpaidBills
                         .sort((a, b) => {
                           if (a.billingYear !== b.billingYear) return a.billingYear - b.billingYear
@@ -1268,16 +1327,16 @@ export default function PGRooms() {
                           return (
                             <div
                               key={bill.id}
-                              className={`flex items-center justify-between gap-3 rounded-lg border p-3 text-sm ${
+                              className={`flex flex-col gap-2 rounded-lg border p-2.5 sm:p-3 text-xs sm:text-sm ${
                                 isCurrent
                                   ? 'border-red-200 bg-red-50/50'
                                   : 'border-amber-100 bg-white/60'
                               }`}
                             >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                                   <Badge
-                                    className={`text-[10px] px-1.5 py-0 ${
+                                    className={`text-[9px] sm:text-[10px] px-1.5 py-0 ${
                                       bill.status === 'Overdue'
                                         ? 'bg-red-100 text-red-800 border-red-200'
                                         : 'bg-amber-100 text-amber-800 border-amber-200'
@@ -1289,12 +1348,15 @@ export default function PGRooms() {
                                     {MONTH_NAMES[bill.billingMonth - 1]} {bill.billingYear}
                                   </span>
                                   {isCurrent && (
-                                    <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-800 border-blue-200">
+                                    <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0 bg-blue-100 text-blue-800 border-blue-200">
                                       Current
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span className="font-bold text-red-700 text-sm sm:text-base">{formatCurrency(remaining)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-muted-foreground flex-wrap">
                                   <span>Rent: {formatCurrency(bill.rentAmount)}</span>
                                   {bill.electricityCharge > 0 && (
                                     <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
@@ -1303,27 +1365,94 @@ export default function PGRooms() {
                                     <span>Paid: {formatCurrency(bill.paidAmount)}</span>
                                   )}
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-3 shrink-0">
-                                <div className="text-right">
-                                  <p className="font-bold text-red-700">{formatCurrency(remaining)}</p>
-                                  <p className="text-[10px] text-muted-foreground">remaining</p>
+                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                    disabled={receiptDownloading === bill.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDownloadReceipt(bill.id)
+                                    }}
+                                  >
+                                    <FileDown className={`h-3 w-3 sm:mr-1 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
+                                    <span className="hidden sm:inline">{receiptDownloading === bill.id ? 'PDF...' : 'Receipt'}</span>
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openMarkPaid(bill)
+                                    }}
+                                  >
+                                    <IndianRupee className="h-3 w-3 sm:mr-1" />
+                                    <span className="hidden sm:inline">Mark Paid</span>
+                                    <span className="sm:hidden">Pay</span>
+                                  </Button>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    openMarkPaid(bill)
-                                  }}
-                                >
-                                  <IndianRupee className="h-3 w-3 mr-1" />
-                                  Mark Paid
-                                </Button>
                               </div>
                             </div>
                           )
                         })}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* ═══ SECTION 4: Paid Bills with Receipt Download ═══ */}
+                {guestDetail.bills.filter((b) => b.status === 'Paid').length > 0 && (
+                  <Card className="border-emerald-200 bg-emerald-50/30">
+                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
+                      <CardTitle className="text-xs sm:text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Paid Bills ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-3 sm:px-4 pb-3 space-y-2">
+                      {guestDetail.bills
+                        .filter((b) => b.status === 'Paid')
+                        .sort((a, b) => {
+                          if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
+                          return b.billingMonth - a.billingMonth
+                        })
+                        .map((bill) => (
+                          <div
+                            key={bill.id}
+                            className="flex items-center justify-between gap-2 sm:gap-3 rounded-lg border border-emerald-100 bg-white/60 p-2.5 sm:p-3 text-xs sm:text-sm"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                                <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-200">
+                                  Paid
+                                </Badge>
+                                <span className="font-medium text-gray-800">
+                                  {MONTH_NAMES[bill.billingMonth - 1]} {bill.billingYear}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                                <span>Rent: {formatCurrency(bill.rentAmount)}</span>
+                                {bill.electricityCharge > 0 && (
+                                  <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
+                                )}
+                                <span>Total: {formatCurrency(bill.totalAmount)}</span>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 shrink-0"
+                              disabled={receiptDownloading === bill.id}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDownloadReceipt(bill.id)
+                              }}
+                            >
+                              <FileDown className={`h-3 w-3 sm:mr-1 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
+                              <span className="hidden sm:inline">{receiptDownloading === bill.id ? 'PDF...' : 'Receipt'}</span>
+                            </Button>
+                          </div>
+                        ))}
                     </CardContent>
                   </Card>
                 )}
@@ -1335,8 +1464,8 @@ export default function PGRooms() {
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGuestDetailOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setGuestDetailOpen(false)} className="border-emerald-200 text-xs sm:text-sm h-8 sm:h-9">
               Close
             </Button>
           </DialogFooter>
@@ -1392,7 +1521,7 @@ export default function PGRooms() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciPhone">Phone</Label>
                     <Input
@@ -1415,7 +1544,7 @@ export default function PGRooms() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciOccupation">Occupation</Label>
                     <Input
@@ -1438,7 +1567,7 @@ export default function PGRooms() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciEmergency">Emergency Contact</Label>
                     <Input
@@ -1475,7 +1604,7 @@ export default function PGRooms() {
 
                 <Separator className="my-1" />
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciDate">
                       Check-in Date <span className="text-red-500">*</span>
@@ -1502,7 +1631,7 @@ export default function PGRooms() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciRatePerUnit">Rate per Unit (₹)</Label>
                     <Input

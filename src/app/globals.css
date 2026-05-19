@@ -119,4 +119,39 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Ensure bottom nav safe area works on iOS */
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Bottom navigation - ensure visibility on mobile */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    nav.fixed.bottom-0 {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+}
+
+/* Force bottom nav to always render on top of everything including dialogs */
+nav.fixed.bottom-0[class*="z-"] {
+  -webkit-overflow-scrolling: touch;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* Mobile bottom-sheet dialog improvements */
+[data-slot="dialog-content"] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Smooth scrolling inside dialog content */
+[data-slot="dialog-content"]::-webkit-scrollbar {
+  width: 4px;
+}
+[data-slot="dialog-content"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-slot="dialog-content"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
 }

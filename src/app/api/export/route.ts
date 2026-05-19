@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import * as XLSX from 'xlsx';
-import { calculateStayMonths, getDateComponents } from '@/lib/billing-utils';
+import { calculateStayMonths, getDateComponents, daysBetween } from '@/lib/billing-utils';
 
 // GET /api/export — Generate and download Excel file with all PG data
 export async function GET() {
@@ -39,8 +39,8 @@ export async function GET() {
     const bills = await db.bill.findMany({
       orderBy: [{ billingYear: 'desc' }, { billingMonth: 'desc' }],
       include: {
-        guest: { select: { name: true, phone: true } },
-        room: { select: { roomNo: true, type: true } },
+        guest: { select: { name: true, phone: true, status: true } },
+        room: { select: { roomNo: true, type: true, monthlyRent: true } },
       },
     });
 
@@ -53,10 +53,26 @@ export async function GET() {
 
     // ─── Helper ───
 
-    const fmtDate = (d: Date | string | null): string => {
+    const fmtDate = (d: Date | string | null | undefined): string => {
       if (!d) return '';
-      const { year, month, day } = getDateComponents(String(d));
-      return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+      try {
+        // Handle Date objects — convert to YYYY-MM-DD string for parseDateSafe
+        let dateInput: string | Date = d;
+        if (d instanceof Date) {
+          // Use UTC methods to avoid timezone shift
+          const y = d.getUTCFullYear();
+          const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          dateInput = `${y}-${m}-${day}`;
+        }
+        const dateStr = String(dateInput);
+        if (dateStr === 'undefined' || dateStr === 'null' || dateStr === '') return '';
+        const { year, month, day } = getDateComponents(dateStr);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) return '';
+        return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+      } catch {
+        return '';
+      }
     };
 
     const fmtCurrency = (n: number): number => Math.round(n);
@@ -81,13 +97,19 @@ export async function GET() {
 
     const guestsData = guests.map((g) => {
       const isLive = g.status === 'Live';
-      const stayMonths = isLive ? calculateStayMonths(g.checkInDate, new Date()) : 0;
+      // For checked-out guests, calculate stay months from checkIn to checkOut
+      const referenceDate = isLive ? new Date() : (g.checkOutDate ? new Date(g.checkOutDate) : new Date());
+      const stayMonths = calculateStayMonths(g.checkInDate, referenceDate);
       const totalPaid = g.bills.reduce(
         (sum, b) => sum + (b.status === 'Paid' ? b.totalAmount : (b.paidAmount || 0)),
         0
       );
       const totalBilled = g.bills.reduce((sum, b) => sum + b.totalAmount, 0);
-      const totalBalance = Math.max(0, stayMonths * g.room.monthlyRent - totalPaid);
+      // Use dynamic accrual-based balance: stayMonths × rent - totalPaid
+      // For checked-out guests with all bills, also compare against totalBilled - totalPaid
+      const accruedBalance = Math.max(0, stayMonths * g.room.monthlyRent - totalPaid);
+      const billBalance = Math.max(0, totalBilled - totalPaid);
+      const totalBalance = isLive ? accruedBalance : Math.max(accruedBalance, billBalance);
 
       return {
         'Guest Name': g.name,
@@ -122,7 +144,9 @@ export async function GET() {
     const billsData = bills.map((b) => ({
       'Guest Name': b.guest.name,
       'Phone': b.guest.phone,
+      'Guest Status': b.guest.status === 'Live' ? 'Active' : 'Checked Out',
       'Room No': b.room.roomNo,
+      'Room Type': b.room.type,
       'Billing Month': `${MONTH_NAMES[b.billingMonth - 1]} ${b.billingYear}`,
       'Rent (₹)': fmtCurrency(b.rentAmount),
       'Electricity (₹)': fmtCurrency(b.electricityCharge),
@@ -132,6 +156,8 @@ export async function GET() {
       'Rate/Unit (₹)': b.ratePerUnit,
       'Adjustment (₹)': fmtCurrency(b.manualAdjustment),
       'Adjustment Reason': b.adjustmentReason || '',
+      'Is Custom Bill': b.isCustomBill ? 'Yes' : 'No',
+      'Custom Total (₹)': b.customTotal !== null ? fmtCurrency(b.customTotal) : '',
       'Total Amount (₹)': fmtCurrency(b.totalAmount),
       'Paid Amount (₹)': fmtCurrency(b.paidAmount || 0),
       'Remaining (₹)': fmtCurrency(b.totalAmount - (b.paidAmount || 0)),
@@ -209,13 +235,70 @@ export async function GET() {
 
     const wsBills = XLSX.utils.json_to_sheet(billsData);
     wsBills['!cols'] = [
-      { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
-      { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
-      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 18 },
-      { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
+      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 14 },
+      { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
       { wch: 14 }, { wch: 14 },
     ];
     XLSX.utils.book_append_sheet(wb, wsBills, 'Bills');
+
+    // ─── Sheet 6: Rent Accrual Summary ───
+    // Dynamic accrual-based summary for ALL guests (live + checked-out)
+
+    const accrualData = guests.map((g) => {
+      const isLive = g.status === 'Live';
+      const referenceDate = isLive ? new Date() : (g.checkOutDate ? new Date(g.checkOutDate) : new Date());
+      const gStayMonths = calculateStayMonths(g.checkInDate, referenceDate);
+      const gTotalPaid = g.bills.reduce(
+        (sum, b) => sum + (b.status === 'Paid' ? b.totalAmount : (b.paidAmount || 0)),
+        0
+      );
+      const gAccruedRent = gStayMonths * g.room.monthlyRent;
+      const gTotalBalance = Math.max(0, gAccruedRent - gTotalPaid);
+      const gDaysStayed = daysBetween(g.checkInDate, referenceDate);
+
+      // Current Bill and Previous Due
+      const unpaidBills = g.bills.filter((b) => b.status !== 'Paid');
+      const totalOutstanding = unpaidBills.reduce(
+        (sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0
+      );
+      // Latest unpaid bill = current bill, rest = previous due
+      let currentBillAmt = 0;
+      if (unpaidBills.length > 0) {
+        const latestUnpaid = unpaidBills[unpaidBills.length - 1];
+        currentBillAmt = Math.max(0, latestUnpaid.totalAmount - (latestUnpaid.paidAmount || 0));
+      } else if (isLive) {
+        currentBillAmt = g.room.monthlyRent;
+      }
+      const previousDueAmt = Math.max(0, gTotalBalance - currentBillAmt);
+
+      return {
+        'Room No': g.room.roomNo,
+        'Guest Name': g.name,
+        'Status': isLive ? 'Active' : 'Checked Out',
+        'Check-in Date': fmtDate(g.checkInDate),
+        'Check-out Date': fmtDate(g.checkOutDate),
+        'Days Stayed': gDaysStayed,
+        'Stay Months': gStayMonths,
+        'Monthly Rent (₹)': g.room.monthlyRent,
+        'Accrued Rent (₹)': fmtCurrency(gAccruedRent),
+        'Calculation': `${gStayMonths} × ₹${g.room.monthlyRent}`,
+        'Total Paid (₹)': fmtCurrency(gTotalPaid),
+        'Current Bill (₹)': fmtCurrency(currentBillAmt),
+        'Previous Due (₹)': fmtCurrency(previousDueAmt),
+        'Total Balance (₹)': fmtCurrency(gTotalBalance),
+        'Security Deposit (₹)': g.securityDeposit?.amount || 0,
+      };
+    });
+
+    const wsAccrual = XLSX.utils.json_to_sheet(accrualData);
+    wsAccrual['!cols'] = [
+      { wch: 10 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 20 },
+      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsAccrual, 'Rent Accrual');
 
     const wsDeposits = XLSX.utils.json_to_sheet(depositsData);
     wsDeposits['!cols'] = [
@@ -231,7 +314,7 @@ export async function GET() {
     // ─── Return as downloadable file ───
 
     const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `PG_Hostel_Report_${dateStr}.xlsx`;
+    const filename = `Room_Rent_Report_${dateStr}.xlsx`;
 
     return new Response(buf, {
       status: 200,

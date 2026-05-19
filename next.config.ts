@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     "space-z.ai",
     "localhost",
   ],
+  serverExternalPackages: ["pdfkit"],
 };
 
 export default nextConfig;

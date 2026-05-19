@@ -133,7 +133,7 @@ export default function PgDashboard() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `PG_Hostel_Report_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `Room_Rent_Report_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -219,7 +219,7 @@ export default function PgDashboard() {
             Dashboard
           </h2>
           <p className="text-sm text-muted-foreground">
-            Overview of your PG Hostel operations
+            Overview of your Room Rent operations
           </p>
         </div>
         <div className="flex items-center gap-2">
