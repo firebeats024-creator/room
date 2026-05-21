@@ -575,7 +575,7 @@ export default function PGRooms() {
         return
       }
 
-      toast.success('Electricity reading updated!')
+      toast.success(data._wasUpdated ? 'Electricity reading corrected!' : 'Electricity reading updated!')
       setElecUpdateOpen(false)
 
       // Refresh guest details to reflect updated bill
@@ -960,456 +960,282 @@ export default function PGRooms() {
 
       {/* ═══════════ GUEST DETAILS DIALOG ═══════════ */}
       <Dialog open={guestDetailOpen} onOpenChange={setGuestDetailOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-800">
-              <FileText className="size-5" />
-              Guest Details
-            </DialogTitle>
-            <DialogDescription>
-              Complete guest information & live billing status
-            </DialogDescription>
-          </DialogHeader>
-
+        <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0 gap-0">
           {guestDetailLoading ? (
-            <div className="space-y-4 py-4">
+            <div className="p-6 space-y-4">
               <Skeleton className="h-32 w-full" />
               <Skeleton className="h-48 w-full" />
             </div>
           ) : guestDetail ? (() => {
             // ─── Billing calculations ───
             const isLive = guestDetail.status === 'Live'
-            // IMPORTANT: Use local-time date string to avoid UTC/local mismatch
-            // When new Date() is passed to getDateComponents (which uses UTC methods),
-            // the UTC day may differ from the local day (e.g., 12:30 AM IST = 7:00 PM UTC previous day)
-            // This caused the "2 Months 62 Days" bug where stayMonths was undercounted
             const nowLocal = new Date()
             const nowLocalStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`
             const stayMonths = isLive ? calculateStayMonths(guestDetail.checkInDate, nowLocalStr) : 0
             const stayRemainingDays = isLive ? remainingDaysAfterMonths(guestDetail.checkInDate, stayMonths, nowLocalStr) : 0
             const monthlyRent = guestDetail.room.monthlyRent
+            const daysStayed = isLive ? Math.floor((nowLocal.getTime() - new Date(guestDetail.checkInDate).getTime()) / (1000 * 60 * 60 * 24)) : 0
 
             // ─── Bill-based outstanding calculation ───
-            // Total outstanding = sum of remaining balances on all non-Paid bills
             const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, nowLocalStr) : null
-
             const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
-
-            // Total paid: sum of all paidAmounts across ALL bills
-            const totalPaid = guestDetail.bills.reduce((sum, b) =>
-              sum + (b.paidAmount || 0), 0)
-
-            // Total outstanding from non-Paid bills
-            const totalOutstanding = unpaidBills.reduce((sum, b) =>
-              sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
-
-            // Current period bill
+            const totalPaid = guestDetail.bills.reduce((sum, b) => sum + (b.paidAmount || 0), 0)
+            const totalOutstanding = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
             const currentPeriodBill = currentPeriod
               ? guestDetail.bills.find((b) => b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
               : null
-
-            // Current month bill: remaining amount for current period
             const currentMonthBill = currentPeriodBill
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
               : (currentPeriod ? monthlyRent : 0)
-
-            // Previous Due: total outstanding minus current period
             const previousDue = Math.max(0, totalOutstanding - currentMonthBill)
+            const totalAccruedRent = stayMonths * monthlyRent
 
             // ─── Electricity details ───
-            // Use ?? instead of || to properly handle 0 as a valid reading
-            const lastElecReading = guestDetail.electricityReadings?.[0] // already ordered desc
-
-            // Opening reading = the reading at check-in time (from the first bill's previousReading)
+            const lastElecReading = guestDetail.electricityReadings?.[0]
             const firstBill = guestDetail.bills[0] || null
             const openingReading = firstBill?.previousReading ?? lastElecReading?.reading ?? 0
-
-            // For previous reading: prefer current period bill, then last bill's currentReading,
-            // then first bill's previousReading (opening reading), then electricity reading
             const sortedBills = [...guestDetail.bills].sort((a, b) => {
               if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
               return b.billingMonth - a.billingMonth
             })
             const lastBill = sortedBills[0] || null
-
-            // Previous reading = the reading at the START of the current billing period
-            // This is always currentPeriodBill.previousReading (set when the bill was created)
             const prevReading = currentPeriodBill?.previousReading
               ?? (lastBill?.currentReading ?? lastBill?.previousReading ?? openingReading ?? 0)
-            // Current reading = latest meter reading for this period
             const currReading = currentPeriodBill?.currentReading ?? (lastElecReading?.reading ?? prevReading)
             const unitsConsumed = currentPeriodBill?.unitsConsumed ?? Math.max(0, currReading - prevReading)
             const ratePerUnit = currentPeriodBill?.ratePerUnit ?? (lastBill?.ratePerUnit ?? 10)
             const elecCharge = currentPeriodBill?.electricityCharge ?? (unitsConsumed * ratePerUnit)
 
             return (
-              <div className="space-y-3 py-1">
-                {/* ═══ SECTION 1: Guest Profile Information ═══ */}
-                <Card className="border-emerald-200 bg-emerald-50/30">
-                  <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
-                    <CardTitle className="text-xs sm:text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5" />
-                      Guest Profile Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-3 sm:px-4 pb-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                    <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2.5 sm:grid-cols-[120px_1fr]">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" />
-                        Guest Name
-                      </span>
-                      <span className="font-semibold">{guestDetail.name}</span>
+              <div className="divide-y divide-gray-100">
+                {/* ═══ HEADER: Guest Profile ═══ */}
+                <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-5 py-4 text-white">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-11 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                        {guestDetail.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold leading-tight">{guestDetail.name}</h3>
+                        <p className="text-emerald-100 text-xs mt-0.5">
+                          Room {guestDetail.room.roomNo} · {guestDetail.room.type} · {formatCurrency(monthlyRent)}/mo
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className={`shrink-0 text-[10px] px-2 py-0.5 ${
+                      isLive
+                        ? 'bg-emerald-400/30 text-white border-emerald-300/40'
+                        : 'bg-amber-400/30 text-white border-amber-300/40'
+                    }`}>
+                      {isLive ? '● Live' : 'Checked Out'}
+                    </Badge>
+                  </div>
+                </div>
 
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5" />
-                        Contact
-                      </span>
-                      <span className="font-medium">{guestDetail.phone || '—'}</span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5" />
-                        Identity
-                      </span>
-                      <span className="font-medium">
-                        <span className="font-mono">{guestDetail.aadhaarNo || '—'}</span>
-                        {guestDetail.photoLink && (
-                          <a
-                            href={guestDetail.photoLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 ml-2 text-xs text-emerald-700 hover:underline"
-                          >
-                            <Camera className="h-3 w-3" />
-                            View Photo
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        )}
-                      </span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Briefcase className="h-3.5 w-3.5" />
-                        Job/Work
-                      </span>
-                      <span className="font-medium">
+                {/* ═══ SECTION 1: Personal Information ═══ */}
+                <div className="px-5 py-4 space-y-3">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5" />
+                    Personal Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Contact</span>
+                      <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.phone || '—'}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Aadhaar</span>
+                      <p className="font-medium text-gray-800 font-mono sm:mt-0.5">{guestDetail.aadhaarNo || '—'}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Occupation</span>
+                      <p className="font-medium text-gray-800 sm:mt-0.5">
                         {guestDetail.occupation || '—'}
-                        {guestDetail.workLocation && (
-                          <span className="text-muted-foreground">
-                            {' '}at{' '}
-                            <span className="inline-flex items-center gap-0.5">
-                              <MapPin className="h-3 w-3" />
-                              {guestDetail.workLocation}
-                            </span>
-                          </span>
-                        )}
-                      </span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Users className="h-3.5 w-3.5" />
-                        Members
-                      </span>
-                      <span className="font-medium">
-                        {guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}
-                      </span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Emergency
-                      </span>
-                      <span className="font-medium">{guestDetail.emergencyContact || '—'}</span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Home className="h-3.5 w-3.5" />
-                        Room
-                      </span>
-                      <span className="font-medium">
-                        {guestDetail.room.roomNo} ({guestDetail.room.type}) &middot; Rent: {formatCurrency(monthlyRent)}
-                      </span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5" />
-                        Deposit
-                      </span>
-                      <span className="font-medium">
+                        {guestDetail.workLocation && <span className="text-gray-400"> at {guestDetail.workLocation}</span>}
+                      </p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Members</span>
+                      <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Emergency Contact</span>
+                      <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.emergencyContact || '—'}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-gray-400 text-xs sm:text-sm">Security Deposit</span>
+                      <p className="font-medium text-gray-800 sm:mt-0.5">
                         {formatCurrency(guestDetail.securityDeposit?.amount ?? 0)}
                         {guestDetail.securityDeposit && (
-                          <span className="text-xs text-muted-foreground ml-1.5">
-                            ({guestDetail.securityDeposit.status})
-                          </span>
+                          <span className="text-gray-400 text-xs ml-1">({guestDetail.securityDeposit.status})</span>
                         )}
-                      </span>
-
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5" />
-                        Check-in
-                      </span>
-                      <span className="font-medium">{formatDate(guestDetail.checkInDate)}</span>
-
-                      <span className="text-muted-foreground">Check-out</span>
-                      <span className="font-medium">{formatDate(guestDetail.checkOutDate)}</span>
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  {guestDetail.photoLink && (
+                    <a
+                      href={guestDetail.photoLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:underline"
+                    >
+                      <Camera className="h-3 w-3" />
+                      View Photo
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  )}
+                </div>
 
-                {/* ═══ SECTION 2: Live Billing Status ═══ */}
+                {/* ═══ SECTION 2: Stay Details ═══ */}
+                <div className="px-5 py-4 bg-gray-50/60 space-y-3">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Stay Details
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-white border border-gray-100 p-2.5">
+                      <p className="text-[10px] text-gray-400 mb-0.5">Check-in</p>
+                      <p className="text-sm font-semibold text-gray-800">{formatDate(guestDetail.checkInDate)}</p>
+                    </div>
+                    <div className="rounded-lg bg-white border border-gray-100 p-2.5">
+                      <p className="text-[10px] text-gray-400 mb-0.5">Billing Cycle</p>
+                      <p className="text-sm font-semibold text-gray-800">{guestDetail.billingCycleDate}{getOrdinalSuffix(guestDetail.billingCycleDate)}</p>
+                    </div>
+                    {isLive && (
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Total Stay</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {stayMonths}m{stayRemainingDays > 0 ? ` ${stayRemainingDays}d` : ''}
+                        </p>
+                      </div>
+                    )}
+                    {isLive && (
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Live As Of</p>
+                        <p className="text-sm font-semibold text-emerald-700">{formatDate(nowLocalStr)}</p>
+                      </div>
+                    )}
+                    {guestDetail.checkOutDate && (
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Check-out</p>
+                        <p className="text-sm font-semibold text-amber-700">{formatDate(guestDetail.checkOutDate)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ═══ SECTION 3: Live Billing Status ═══ */}
                 {isLive && (
-                  <Card className="border-red-200 bg-red-50/30">
-                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
-                      <CardTitle className="text-xs sm:text-sm font-semibold text-red-700 flex items-center gap-1.5">
+                  <div className="px-5 py-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <CreditCard className="h-3.5 w-3.5" />
                         Live Billing Status
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 sm:px-4 pb-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                      <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 sm:gap-x-3 sm:gap-y-2.5 sm:grid-cols-[140px_1fr]">
-                        <span className="text-muted-foreground">Check-in Date</span>
-                        <span className="font-medium">{formatDate(guestDetail.checkInDate)}</span>
+                      </h4>
+                      <span className="text-[10px] text-gray-400">
+                        {daysStayed} days · {stayMonths} months × {formatCurrency(monthlyRent)} = {formatCurrency(totalAccruedRent)} accrued
+                      </span>
+                    </div>
 
-                        <span className="text-muted-foreground">Total Stay</span>
-                        <span className="font-semibold text-amber-800">
-                          {stayMonths} Month{stayMonths !== 1 ? 's' : ''}{stayRemainingDays > 0 ? ` ${stayRemainingDays} Day${stayRemainingDays !== 1 ? 's' : ''}` : ''}
-                          {stayRemainingDays > 27 && (
-                            <span className="text-[10px] text-red-500 ml-1">(calc error — days should be &lt; 28)</span>
-                          )}
-                          <span className="text-xs text-muted-foreground font-normal ml-1">(live)</span>
-                        </span>
-
-                        <span className="text-muted-foreground">Monthly Rent</span>
-                        <span className="font-medium">{formatCurrency(monthlyRent)}</span>
-
-                        <span className="text-muted-foreground">Accrued Rent</span>
-                        <span className="font-medium">{formatCurrency(stayMonths * monthlyRent)}
-                          <span className="text-xs text-muted-foreground ml-1">({stayMonths} × {formatCurrency(monthlyRent)})</span>
-                        </span>
-
-                        <span className="text-muted-foreground">Total Paid</span>
-                        <span className="font-medium text-emerald-700">{formatCurrency(totalPaid)}</span>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div className="rounded-lg bg-red-50 border border-red-100 p-2.5 text-center">
+                        <p className="text-[10px] text-red-400 mb-0.5">Current Bill</p>
+                        <p className="text-sm font-bold text-red-700">{formatCurrency(currentMonthBill)}</p>
                       </div>
-
-                      <Separator className="my-2" />
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Current Month Bill</span>
-                        <span className="font-medium text-amber-800">
-                          {formatCurrency(currentMonthBill)}
-                        </span>
+                      <div className="rounded-lg bg-amber-50 border border-amber-100 p-2.5 text-center">
+                        <p className="text-[10px] text-amber-500 mb-0.5">Previous Due</p>
+                        <p className="text-sm font-bold text-amber-700">{formatCurrency(previousDue)}</p>
                       </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Previous Due</span>
-                        <span className={`font-medium ${previousDue > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                          {formatCurrency(previousDue)}
-                        </span>
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2.5 text-center">
+                        <p className="text-[10px] text-emerald-500 mb-0.5">Total Paid</p>
+                        <p className="text-sm font-bold text-emerald-700">{formatCurrency(totalPaid)}</p>
                       </div>
+                    </div>
 
-                      <Separator className="my-1 border-dashed border-red-300" />
-
-                      <div className="flex justify-between items-center py-1">
-                        <span className="font-bold text-red-800">Total Outstanding</span>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <span className="font-bold text-red-800 text-sm sm:text-base">
-                            {formatCurrency(totalOutstanding)}
-                          </span>
-                          {totalOutstanding > 0 && (
-                            <Button
-                              size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs h-7 px-2 sm:px-3"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openCustomPay(totalOutstanding)
-                              }}
-                            >
-                              <IndianRupee className="h-3 w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Custom Payment</span>
-                              <span className="sm:hidden">Pay</span>
-                            </Button>
-                          )}
+                    {totalOutstanding > 0 ? (
+                      <div className="flex items-center justify-between bg-red-50 rounded-lg p-3 border border-red-200">
+                        <div>
+                          <p className="text-xs font-semibold text-red-800">Total Outstanding</p>
+                          <p className="text-lg font-bold text-red-800">{formatCurrency(totalOutstanding)}</p>
                         </div>
-                      </div>
-
-                      {totalOutstanding === 0 && (
-                        <div className="mt-1 flex items-start gap-1.5 text-xs text-emerald-700 bg-emerald-100 p-2 rounded">
-                          <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>All dues cleared — no outstanding balance.</span>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* ═══ SECTION 2.5: Electricity Details ═══ */}
-                {isLive && (
-                  <Card className="border-amber-300 bg-amber-50/20">
-                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-xs sm:text-sm font-semibold text-amber-700 flex items-center gap-1.5">
-                          <Zap className="h-4 w-4" />
-                          Electricity Details
-                        </CardTitle>
                         <Button
                           size="sm"
-                          className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] sm:text-xs h-7 px-2 sm:px-3"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
                           onClick={(e) => {
                             e.stopPropagation()
-                            setElecNewReading(String(currReading ?? prevReading ?? openingReading ?? 0))
-                            setElecUpdateOpen(true)
+                            openCustomPay(totalOutstanding)
                           }}
                         >
-                          <Zap className="h-3 w-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Update Reading</span>
-                          <span className="sm:hidden">Update</span>
+                          <IndianRupee className="h-3.5 w-3.5 mr-1" />
+                          Pay Now
                         </Button>
                       </div>
-                    </CardHeader>
-                    <CardContent className="px-3 sm:px-4 pb-3 text-xs sm:text-sm">
-                      {/* Three input fields: Opening Unit, Ending Unit, Rate/Unit */}
-                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Opening Unit</Label>
-                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
-                            <span className="text-base sm:text-lg font-bold text-emerald-700">{openingReading}</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Ending Unit</Label>
-                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
-                            <span className="text-base sm:text-lg font-bold text-gray-800">{currReading}</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] sm:text-[11px] text-amber-700 font-semibold uppercase tracking-wide">Rate / Unit (₹)</Label>
-                          <div className="rounded-lg border border-amber-200 bg-white/80 px-2.5 py-2 sm:px-3 sm:py-2.5 text-center">
-                            <span className="text-base sm:text-lg font-bold text-gray-800">{ratePerUnit}</span>
-                          </div>
-                        </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                        <span className="font-medium">All dues cleared — no outstanding balance.</span>
                       </div>
-
-                      {/* Result info bar */}
-                      <div className="mt-2.5 sm:mt-3 flex items-center justify-between rounded-lg bg-amber-100/80 border border-amber-200 px-3 py-2 sm:px-4 sm:py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <Zap className="h-3.5 w-3.5 text-amber-600" />
-                          <span className="text-xs sm:text-sm font-semibold text-gray-800">Units: <span className="text-amber-800">{unitsConsumed}</span></span>
-                        </div>
-                        <div className="text-xs sm:text-sm font-bold text-amber-800">
-                          Charge: {formatCurrency(elecCharge)}
-                        </div>
-                      </div>
-
-                      {lastElecReading && (
-                        <p className="mt-2 text-[10px] text-muted-foreground">
-                          Last reading: {lastElecReading.reading} on {formatDate(lastElecReading.readingDate)}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
+                    )}
+                  </div>
                 )}
 
-                {/* ═══ SECTION 3: Unpaid Bills with Mark Paid ═══ */}
-                {unpaidBills.length > 0 && (
-                  <Card className="border-amber-200 bg-amber-50/30">
-                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
-                      <CardTitle className="text-xs sm:text-sm font-semibold text-amber-700 flex items-center gap-1.5">
-                        <IndianRupee className="h-3.5 w-3.5" />
-                        Unpaid Bills ({unpaidBills.length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 sm:px-4 pb-3 space-y-2">
-                      {unpaidBills
-                        .sort((a, b) => {
-                          if (a.billingYear !== b.billingYear) return a.billingYear - b.billingYear
-                          return a.billingMonth - b.billingMonth
-                        })
-                        .map((bill) => {
-                          const remaining = bill.totalAmount - (bill.paidAmount || 0)
-                          const isCurrent = currentPeriod
-                            ? bill.billingMonth === currentPeriod.month && bill.billingYear === currentPeriod.year
-                            : false
-
-                          return (
-                            <div
-                              key={bill.id}
-                              className={`flex flex-col gap-2 rounded-lg border p-2.5 sm:p-3 text-xs sm:text-sm ${
-                                isCurrent
-                                  ? 'border-red-200 bg-red-50/50'
-                                  : 'border-amber-100 bg-white/60'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                                  <Badge
-                                    className={`text-[9px] sm:text-[10px] px-1.5 py-0 ${
-                                      bill.status === 'Overdue'
-                                        ? 'bg-red-100 text-red-800 border-red-200'
-                                        : 'bg-amber-100 text-amber-800 border-amber-200'
-                                    }`}
-                                  >
-                                    {bill.status}
-                                  </Badge>
-                                  <span className="font-medium text-gray-800">
-                                    {MONTH_NAMES[bill.billingMonth - 1]} {bill.billingYear}
-                                  </span>
-                                  {isCurrent && (
-                                    <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0 bg-blue-100 text-blue-800 border-blue-200">
-                                      Current
-                                    </Badge>
-                                  )}
-                                </div>
-                                <span className="font-bold text-red-700 text-sm sm:text-base">{formatCurrency(remaining)}</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-muted-foreground flex-wrap">
-                                  <span>Rent: {formatCurrency(bill.rentAmount)}</span>
-                                  {bill.electricityCharge > 0 && (
-                                    <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
-                                  )}
-                                  {bill.paidAmount > 0 && (
-                                    <span>Paid: {formatCurrency(bill.paidAmount)}</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                    disabled={receiptDownloading === bill.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDownloadReceipt(bill.id)
-                                    }}
-                                  >
-                                    <FileDown className={`h-3 w-3 sm:mr-1 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
-                                    <span className="hidden sm:inline">{receiptDownloading === bill.id ? 'PDF...' : 'Receipt'}</span>
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      openMarkPaid(bill)
-                                    }}
-                                  >
-                                    <IndianRupee className="h-3 w-3 sm:mr-1" />
-                                    <span className="hidden sm:inline">Mark Paid</span>
-                                    <span className="sm:hidden">Pay</span>
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                    </CardContent>
-                  </Card>
+                {/* ═══ SECTION 4: Electricity ═══ */}
+                {isLive && (
+                  <div className="px-5 py-4 bg-amber-50/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <Zap className="h-3.5 w-3.5" />
+                        Electricity
+                      </h4>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-300 text-amber-700 hover:bg-amber-100 text-[10px] sm:text-xs h-7 px-2 sm:px-2.5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setElecNewReading(String(currReading ?? prevReading ?? openingReading ?? 0))
+                          setElecUpdateOpen(true)
+                        }}
+                      >
+                        <Zap className="h-3 w-3 sm:mr-1" />
+                        <span className="hidden sm:inline">Update</span>
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Opening Unit</p>
+                        <p className="text-sm font-bold font-mono text-emerald-700">{openingReading}</p>
+                      </div>
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Current Unit</p>
+                        <p className="text-sm font-bold font-mono text-gray-800">{currReading}</p>
+                      </div>
+                      <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">Rate/Unit</p>
+                        <p className="text-sm font-bold font-mono text-gray-800">₹{ratePerUnit}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="h-4 w-4 text-amber-500" />
+                        <span className="text-gray-500">Units: <span className="font-semibold text-gray-800">{unitsConsumed}</span></span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-500">Charge: </span>
+                        <span className="font-bold text-amber-700">{formatCurrency(elecCharge)}</span>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                {/* ═══ SECTION 4: Paid Bills with Receipt Download ═══ */}
+                {/* ═══ SECTION 5: Payment History ═══ */}
                 {guestDetail.bills.filter((b) => b.status === 'Paid').length > 0 && (
-                  <Card className="border-emerald-200 bg-emerald-50/30">
-                    <CardHeader className="pb-1.5 pt-3 px-3 sm:px-4">
-                      <CardTitle className="text-xs sm:text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Paid Bills ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 sm:px-4 pb-3 space-y-2">
+                  <div className="px-5 py-4 space-y-3">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Payment History ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {guestDetail.bills
                         .filter((b) => b.status === 'Paid')
                         .sort((a, b) => {
@@ -1419,18 +1245,18 @@ export default function PGRooms() {
                         .map((bill) => (
                           <div
                             key={bill.id}
-                            className="flex items-center justify-between gap-2 sm:gap-3 rounded-lg border border-emerald-100 bg-white/60 p-2.5 sm:p-3 text-xs sm:text-sm"
+                            className="flex items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/40 p-2.5"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-                                <Badge className="text-[9px] sm:text-[10px] px-1.5 py-0 bg-emerald-100 text-emerald-800 border-emerald-200">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <Badge className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 border-emerald-200">
                                   Paid
                                 </Badge>
-                                <span className="font-medium text-gray-800">
+                                <span className="text-sm font-medium text-gray-800">
                                   {MONTH_NAMES[bill.billingMonth - 1]} {bill.billingYear}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2 text-[10px] text-gray-400">
                                 <span>Rent: {formatCurrency(bill.rentAmount)}</span>
                                 {bill.electricityCharge > 0 && (
                                   <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
@@ -1441,34 +1267,35 @@ export default function PGRooms() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 shrink-0"
+                              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-[10px] h-7 px-2 shrink-0"
                               disabled={receiptDownloading === bill.id}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 handleDownloadReceipt(bill.id)
                               }}
                             >
-                              <FileDown className={`h-3 w-3 sm:mr-1 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
-                              <span className="hidden sm:inline">{receiptDownloading === bill.id ? 'PDF...' : 'Receipt'}</span>
+                              <FileDown className={`h-3 w-3 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
+                              <span className="ml-1">{receiptDownloading === bill.id ? '...' : 'PDF'}</span>
                             </Button>
                           </div>
                         ))}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 )}
+
+                {/* ═══ FOOTER: Close Button ═══ */}
+                <div className="px-5 py-3 bg-gray-50/60 flex justify-end">
+                  <Button variant="outline" onClick={() => setGuestDetailOpen(false)} className="border-gray-200 text-gray-600 hover:bg-gray-100 text-xs h-8">
+                    Close
+                  </Button>
+                </div>
               </div>
             )
           })() : (
-            <div className="py-8 text-center text-muted-foreground">
+            <div className="p-8 text-center text-gray-400">
               No guest details found
             </div>
           )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setGuestDetailOpen(false)} className="border-emerald-200 text-xs sm:text-sm h-8 sm:h-9">
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

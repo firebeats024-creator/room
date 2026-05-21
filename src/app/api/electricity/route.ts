@@ -30,10 +30,15 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/electricity - Create a new electricity reading
+// POST /api/electricity - Create or update electricity reading for current billing period
 // Also updates the current billing period's bill with the electricity charge
 // The "previous reading" for the current bill = the opening reading of the billing period
 // The "current reading" = the new meter reading just entered
+//
+// KEY BEHAVIOR: If a reading already exists for the current billing period,
+// it will be UPDATED (not duplicated). This allows users to correct mistakes.
+// Validation: new reading must be >= opening reading (previousReading of current bill),
+// NOT >= last reading. This allows corrections within the same billing period.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -74,28 +79,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the previous reading for validation (from ElectricityReading table)
-    const lastReading = await db.electricityReading.findFirst({
-      where: { guestId },
-      orderBy: { readingDate: 'desc' },
-    });
-
-    if (lastReading && parsedReading < lastReading.reading) {
-      return NextResponse.json(
-        { error: `New reading (${parsedReading}) cannot be less than the last reading (${lastReading.reading})` },
-        { status: 400 }
-      );
-    }
-
-    // Create the reading record
-    const newReading = await db.electricityReading.create({
-      data: {
-        guestId,
-        reading: parsedReading,
-        readingDate: readingDate ? new Date(readingDate) : new Date(),
-      },
-    });
-
     // ─── DETERMINE CURRENT BILLING PERIOD ───
     const todayParts = getDateComponents(new Date());
     const currentDay = todayParts.day;
@@ -115,6 +98,13 @@ export async function POST(request: Request) {
         currentBillingYear--;
       }
     }
+
+    // ─── GET THE LAST READING FROM PREVIOUS BILLING PERIOD ───
+    // This is used to determine the opening reading for the current period
+    const lastReading = await db.electricityReading.findFirst({
+      where: { guestId },
+      orderBy: { readingDate: 'desc' },
+    });
 
     // Find the current period's bill
     let currentBill = await db.bill.findFirst({
@@ -185,6 +175,54 @@ export async function POST(request: Request) {
       });
     }
 
+    // ─── VALIDATE: New reading must be >= opening reading (previousReading of current bill) ───
+    // This allows corrections within the current billing period.
+    // Example: opening=500, user enters 600 by mistake, can correct to 550 (>= 500 ✓)
+    // But cannot go below the opening reading: 400 < 500 ✗
+    const openingReading = currentBill.previousReading;
+    if (parsedReading < openingReading) {
+      return NextResponse.json(
+        { error: `New reading (${parsedReading}) cannot be less than the opening reading (${openingReading}) for this billing period` },
+        { status: 400 }
+      );
+    }
+
+    // ─── CHECK IF A READING ALREADY EXISTS FOR THE CURRENT BILLING PERIOD ───
+    // If yes, UPDATE it instead of creating a duplicate.
+    // We identify the "current period reading" as the most recent ElectricityReading
+    // that was created after the current billing period started.
+    const currentPeriodStartDate = new Date(currentBillingYear, currentBillingMonth - 1, billingCycleDate);
+
+    const existingCurrentPeriodReading = await db.electricityReading.findFirst({
+      where: {
+        guestId,
+        readingDate: { gte: currentPeriodStartDate },
+      },
+      orderBy: { readingDate: 'desc' },
+    });
+
+    let savedReading;
+
+    if (existingCurrentPeriodReading) {
+      // UPDATE the existing reading for this billing period (allow correction)
+      savedReading = await db.electricityReading.update({
+        where: { id: existingCurrentPeriodReading.id },
+        data: {
+          reading: parsedReading,
+          readingDate: readingDate ? new Date(readingDate) : new Date(),
+        },
+      });
+    } else {
+      // CREATE a new reading record (first reading for this billing period)
+      savedReading = await db.electricityReading.create({
+        data: {
+          guestId,
+          reading: parsedReading,
+          readingDate: readingDate ? new Date(readingDate) : new Date(),
+        },
+      });
+    }
+
     // ─── UPDATE CURRENT BILL WITH ELECTRICITY INFO ───
     // The "previous reading" = the opening meter reading at the START of this billing period
     // It should NOT change when we update the current reading — it represents the baseline
@@ -206,7 +244,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      ...newReading,
+      ...savedReading,
       _billUpdate: {
         previousReading,
         currentReading,
@@ -214,11 +252,12 @@ export async function POST(request: Request) {
         electricityCharge,
         ratePerUnit,
       },
-    }, { status: 201 });
+      _wasUpdated: !!existingCurrentPeriodReading,
+    }, { status: existingCurrentPeriodReading ? 200 : 201 });
   } catch (error) {
-    console.error('Error creating electricity reading:', error);
+    console.error('Error creating/updating electricity reading:', error);
     return NextResponse.json(
-      { error: 'Failed to create electricity reading' },
+      { error: 'Failed to save electricity reading' },
       { status: 500 }
     );
   }
