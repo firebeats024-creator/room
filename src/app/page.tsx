@@ -32,6 +32,7 @@ const navItems = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [showSettings, setShowSettings] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -190,16 +191,20 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-emerald-200 dark:border-emerald-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-emerald-600 p-1.5">
+            <div
+              className="flex items-center gap-2 cursor-pointer select-none"
+              onClick={() => setShowSettings(prev => !prev)}
+            >
+              <div className={`rounded-lg p-1.5 transition-colors duration-300 ${showSettings ? 'bg-red-600' : 'bg-emerald-600'}`}>
                 <Building2 className="h-5 w-5 text-white" />
               </div>
-              <h1 className="text-base sm:text-lg font-bold text-emerald-900 dark:text-emerald-100">
+              <h1 className={`text-base sm:text-lg font-bold transition-colors duration-300 ${showSettings ? 'text-red-600 dark:text-red-400' : 'text-emerald-900 dark:text-emerald-100'}`}>
                 Room Rent
               </h1>
             </div>
 
-            {/* Settings Dropdown */}
+            {/* Settings Dropdown - hidden by default, shown on logo click */}
+            {showSettings && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -249,6 +254,7 @@ export default function Home() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
       </header>

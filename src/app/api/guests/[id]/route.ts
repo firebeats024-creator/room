@@ -20,6 +20,7 @@ export async function GET(
             roomNo: true,
             floor: true,
             type: true,
+            baseRent: true,
             monthlyRent: true,
             status: true,
           },
@@ -141,6 +142,7 @@ export async function GET(
                 roomNo: true,
                 floor: true,
                 type: true,
+                baseRent: true,
                 monthlyRent: true,
                 status: true,
               },
@@ -188,7 +190,30 @@ export async function GET(
       const currentYear = todayParts.year;
       const currentDay = todayParts.day;
       const billingCycleDate = guest.billingCycleDate;
-      const monthlyRent = guest.room.monthlyRent;
+      const currentMonthlyRent = guest.room.monthlyRent;
+
+      // Fetch rent change history for this room to determine correct rent per period
+      const rentChanges = await db.rentChange.findMany({
+        where: { roomId: guest.roomId },
+        orderBy: { effectiveDate: 'asc' },
+      });
+
+      // Helper: get the rent that was active for a given billing month/year
+      const getRentForPeriod = (month: number, year: number): number => {
+        // Start with the rent before any changes (first change's oldRent, or currentRent if no changes)
+        const originalRent = rentChanges.length > 0 ? rentChanges[0].oldRent : currentMonthlyRent;
+        let activeRent = originalRent;
+        for (const rc of rentChanges) {
+          const rcParts = getDateComponents(rc.effectiveDate);
+          // If the change's effective date is in or before this billing period, apply it
+          if (rcParts.year < year || (rcParts.year === year && rcParts.month <= month)) {
+            activeRent = rc.newRent;
+          } else {
+            break; // rentChanges are sorted by date ascending
+          }
+        }
+        return activeRent;
+      };
 
       let latestBillingMonth: number;
       let latestBillingYear: number;
@@ -259,13 +284,16 @@ export async function GET(
           // Get ratePerUnit from previous bill or default to 10
           const ratePerUnit = lastPreviousBill?.ratePerUnit ?? 10;
 
+          // ─── RENT-AWARE: Use the correct rent for this billing period ───
+          const rentForThisPeriod = getRentForPeriod(iterMonth, iterYear);
+
           const newBill = await db.bill.create({
             data: {
               guestId: guest.id,
               roomId: guest.roomId,
               billingMonth: iterMonth,
               billingYear: iterYear,
-              rentAmount: monthlyRent,
+              rentAmount: rentForThisPeriod,
               electricityCharge: 0,
               previousReading,
               currentReading: previousReading, // same as previous until a new reading is taken
@@ -275,7 +303,7 @@ export async function GET(
               manualAdjustment: 0,
               adjustmentReason: '',
               isCustomBill: false,
-              totalAmount: monthlyRent,
+              totalAmount: rentForThisPeriod,
               dueDate,
               status: 'Unpaid',
             },
@@ -339,6 +367,7 @@ export async function GET(
                 roomNo: true,
                 floor: true,
                 type: true,
+                baseRent: true,
                 monthlyRent: true,
                 status: true,
               },

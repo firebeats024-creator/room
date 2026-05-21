@@ -37,7 +37,12 @@ export async function POST(request: Request) {
 
     // Timezone-safe date parsing (uses UTC methods)
     const checkInParts = getDateComponents(checkInDate);
-    const monthlyRent = room.monthlyRent;
+    // IMPORTANT: For vacant rooms, use baseRent as the canonical rent
+    // (monthlyRent should equal baseRent after checkout, but as a safety measure,
+    // prefer baseRent when the room is vacant to prevent stale rent from previous guest)
+    const monthlyRent = room.status === 'Vacant' && room.baseRent > 0
+      ? room.baseRent
+      : room.monthlyRent;
     const billingCycleDate = checkInParts.day; // day of month (UTC-safe)
     const billingMonth = checkInParts.month; // 1-12 (UTC-safe)
     const billingYear = checkInParts.year; // (UTC-safe)
@@ -124,10 +129,12 @@ export async function POST(request: Request) {
         },
       });
 
-      // Update room status to Occupied
+      // Update room status to Occupied and ensure monthlyRent matches the rent used for billing
+      // This is a safety measure: if monthlyRent was stale from a previous guest,
+      // we reset it here to match the actual rent being charged to the new guest
       await tx.room.update({
         where: { id: roomId },
-        data: { status: 'Occupied' },
+        data: { status: 'Occupied', monthlyRent },
       });
 
       return { guest, deposit, bill };

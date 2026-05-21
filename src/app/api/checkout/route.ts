@@ -224,10 +224,21 @@ export async function POST(request: Request) {
         });
       }
 
-      // Update room status to Vacant
+      // Update room status to Vacant and reset rent to baseRent
+      // Delete all RentChange records for this room (they belonged to the old guest's tenure)
+      // IMPORTANT: monthlyRent MUST reset to baseRent so the next guest gets the default rent
+      const resetRent = guest.room.baseRent > 0 ? guest.room.baseRent : guest.room.monthlyRent;
       await tx.room.update({
         where: { id: guest.roomId },
-        data: { status: 'Vacant' },
+        data: { 
+          status: 'Vacant',
+          monthlyRent: resetRent, // Reset to base/default rent for next guest
+        },
+      });
+
+      // Delete all rent change records for this room — they belonged to the outgoing guest
+      await tx.rentChange.deleteMany({
+        where: { roomId: guest.roomId },
       });
 
       return updatedGuest;

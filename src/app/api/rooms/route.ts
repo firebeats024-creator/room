@@ -11,10 +11,29 @@ export async function GET() {
           where: { status: 'Live' },
           select: { id: true, name: true, checkInDate: true },
         },
+        rentChanges: {
+          orderBy: { effectiveDate: 'desc' },
+          take: 5,
+        },
       },
     });
 
-    return NextResponse.json(rooms);
+    // Safety: For vacant rooms, ensure monthlyRent = baseRent
+    // (this prevents stale rent from a previous guest showing in the UI)
+    const sanitizedRooms = rooms.map((room) => {
+      if (room.status === 'Vacant' && room.baseRent > 0 && room.monthlyRent !== room.baseRent) {
+        // Fix the stale monthlyRent in the background (fire-and-forget)
+        db.room.update({
+          where: { id: room.id },
+          data: { monthlyRent: room.baseRent },
+        }).catch(() => {}); // Ignore errors — this is a safety measure
+
+        return { ...room, monthlyRent: room.baseRent };
+      }
+      return room;
+    });
+
+    return NextResponse.json(sanitizedRooms);
   } catch (error) {
     console.error('Error fetching rooms:', error);
     return NextResponse.json(
@@ -55,6 +74,7 @@ export async function POST(request: Request) {
         roomNo,
         floor: floor ?? 1,
         type: type ?? 'Single',
+        baseRent: monthlyRent ?? 5000,
         monthlyRent: monthlyRent ?? 5000,
         status: status ?? 'Vacant',
       },

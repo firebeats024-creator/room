@@ -20,7 +20,13 @@ export async function POST() {
     const liveGuests = await db.guest.findMany({
       where: { status: 'Live' },
       include: {
-        room: true,
+        room: {
+          include: {
+            rentChanges: {
+              orderBy: { effectiveDate: 'asc' },
+            },
+          },
+        },
         bills: {
           select: {
             billingMonth: true,
@@ -42,7 +48,23 @@ export async function POST() {
       // Timezone-safe date parsing for check-in date
       const checkInParts = getDateComponents(guest.checkInDate);
       const billingCycleDate = guest.billingCycleDate; // day of month
-      const monthlyRent = guest.room.monthlyRent;
+      const currentMonthlyRent = guest.room.monthlyRent;
+
+      // Build rent-aware helper for this guest's room
+      const rentChanges = guest.room.rentChanges || [];
+      const getRentForPeriod = (month: number, year: number): number => {
+        const originalRent = rentChanges.length > 0 ? rentChanges[0].oldRent : currentMonthlyRent;
+        let activeRent = originalRent;
+        for (const rc of rentChanges) {
+          const rcParts = getDateComponents(rc.effectiveDate);
+          if (rcParts.year < year || (rcParts.year === year && rcParts.month <= month)) {
+            activeRent = rc.newRent;
+          } else {
+            break;
+          }
+        }
+        return activeRent;
+      };
 
       // Determine which months need bills based on +1 Day Rule
       let latestBillingMonth: number;
@@ -116,6 +138,9 @@ export async function POST() {
           // Get ratePerUnit from previous bill or default to 10
           const ratePerUnit = lastPreviousBill?.ratePerUnit ?? 10;
 
+          // ─── RENT-AWARE: Use the correct rent for this billing period ───
+          const rentForThisPeriod = getRentForPeriod(iterMonth, iterYear);
+
           // Create the missing bill
           const newBill = await db.bill.create({
             data: {
@@ -123,7 +148,7 @@ export async function POST() {
               roomId: guest.roomId,
               billingMonth: iterMonth,
               billingYear: iterYear,
-              rentAmount: monthlyRent,
+              rentAmount: rentForThisPeriod,
               electricityCharge: 0,
               previousReading: openingReading,
               currentReading: openingReading, // same as previous until a new reading is taken
@@ -133,7 +158,7 @@ export async function POST() {
               manualAdjustment: 0,
               adjustmentReason: '',
               isCustomBill: false,
-              totalAmount: monthlyRent,
+              totalAmount: rentForThisPeriod,
               dueDate,
               status: 'Unpaid',
             },
@@ -153,7 +178,7 @@ export async function POST() {
             guestName: guest.name,
             month: iterMonth,
             year: iterYear,
-            amount: monthlyRent,
+            amount: rentForThisPeriod,
           });
         }
 

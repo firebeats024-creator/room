@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { calculateAccruedRentWithChanges } from '@/lib/billing-utils';
 
 // GET /api/dashboard - Get dashboard statistics
 export async function GET() {
@@ -82,19 +83,115 @@ export async function GET() {
       0
     );
 
-    // Recent guests (last 5)
+    // Recent guests — only Live guests with billing summary
     const recentGuests = await db.guest.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
+      where: { status: 'Live' },
+      orderBy: { checkInDate: 'desc' },
       include: {
         room: {
           select: {
             roomNo: true,
             type: true,
+            baseRent: true,
             monthlyRent: true,
           },
         },
+        bills: {
+          select: {
+            id: true,
+            totalAmount: true,
+            paidAmount: true,
+            status: true,
+            rentAmount: true,
+            electricityCharge: true,
+            billingMonth: true,
+            billingYear: true,
+          },
+        },
       },
+    });
+
+    // Fetch all rent changes for all rooms (to calculate accrued rent correctly)
+    const allRentChanges = await db.rentChange.findMany({
+      select: {
+        id: true,
+        roomId: true,
+        oldRent: true,
+        newRent: true,
+        effectiveDate: true,
+      },
+      orderBy: { effectiveDate: 'asc' },
+    });
+
+    // Group rent changes by roomId
+    const rentChangesByRoom: Record<string, typeof allRentChanges> = {};
+    for (const rc of allRentChanges) {
+      if (!rentChangesByRoom[rc.roomId]) rentChangesByRoom[rc.roomId] = [];
+      rentChangesByRoom[rc.roomId].push(rc);
+    }
+
+    // Calculate billing summary for each guest
+    const recentGuestsWithBilling = recentGuests.map(guest => {
+      const unpaidBills = guest.bills.filter(b => b.status !== 'Paid');
+      const totalPaid = guest.bills.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
+      const totalOutstanding = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0);
+
+      // Current billing period
+      const now = new Date();
+      const currentDay = now.getDate();
+      const billingCycleDate = guest.billingCycleDate;
+      let currentMonth: number, currentYear: number;
+      if (currentDay > billingCycleDate) {
+        currentMonth = now.getMonth() + 1;
+        currentYear = now.getFullYear();
+      } else {
+        currentMonth = now.getMonth();
+        currentYear = now.getFullYear();
+        if (currentMonth === 0) { currentMonth = 12; currentYear--; }
+      }
+
+      const currentPeriodBill = guest.bills.find(b => b.billingMonth === currentMonth && b.billingYear === currentYear);
+      const monthlyRent = guest.room.monthlyRent;
+      const currentMonthBill = currentPeriodBill
+        ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
+        : monthlyRent;
+      const previousDue = Math.max(0, totalOutstanding - currentMonthBill);
+
+      // Calculate stay months
+      const checkIn = new Date(guest.checkInDate);
+      let months = (now.getFullYear() - checkIn.getFullYear()) * 12 + (now.getMonth() - checkIn.getMonth());
+      if (now.getDate() < checkIn.getDate()) months--;
+      if (months < 0) months = 0;
+
+      // Calculate totalAccruedRent accounting for rent changes
+      const roomRentChanges = rentChangesByRoom[guest.roomId] || [];
+      const { totalAccruedRent } = calculateAccruedRentWithChanges(
+        guest.checkInDate,
+        monthlyRent,
+        roomRentChanges.map(rc => ({
+          effectiveDate: rc.effectiveDate,
+          newRent: rc.newRent,
+          oldRent: rc.oldRent,
+        }))
+      );
+
+      return {
+        id: guest.id,
+        name: guest.name,
+        phone: guest.phone,
+        checkInDate: guest.checkInDate,
+        status: guest.status,
+        billingCycleDate: guest.billingCycleDate,
+        room: guest.room,
+        billing: {
+          totalAccruedRent,
+          totalPaid,
+          totalOutstanding,
+          currentMonthBill,
+          previousDue,
+          stayMonths: months,
+        },
+      };
     });
 
     // Rooms under maintenance
@@ -137,7 +234,7 @@ export async function GET() {
       overdueAmount,
       activeDeposits,
       totalDepositAmount,
-      recentGuests,
+      recentGuests: recentGuestsWithBilling,
       revenueByMonth,
       occupancyRate: totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0,
     });

@@ -73,11 +73,19 @@ interface Room {
   roomNo: string
   floor: number
   type: string
+  baseRent: number
   monthlyRent: number
   status: string
   createdAt: string
   updatedAt: string
   guests: GuestBasic[]
+  rentChanges?: {
+    id: string
+    oldRent: number
+    newRent: number
+    effectiveDate: string
+    reason: string
+  }[]
 }
 
 interface GuestBill {
@@ -135,6 +143,7 @@ interface GuestFull {
     roomNo: string
     floor: number
     type: string
+    baseRent: number
     monthlyRent: number
     status: string
   }
@@ -261,6 +270,14 @@ export default function PGRooms() {
   const [ciRatePerUnit, setCiRatePerUnit] = useState('10')
   const [ciDeposit, setCiDeposit] = useState('')
 
+  // Rent Update dialog state
+  const [rentUpdateOpen, setRentUpdateOpen] = useState(false)
+  const [rentUpdateRoom, setRentUpdateRoom] = useState<Room | null>(null)
+  const [rentUpdateNewRent, setRentUpdateNewRent] = useState('')
+  const [rentUpdateEffectiveDate, setRentUpdateEffectiveDate] = useState('')
+  const [rentUpdateReason, setRentUpdateReason] = useState('')
+  const [rentUpdateSubmitting, setRentUpdateSubmitting] = useState(false)
+
   // ─── Fetch rooms ───
 
   const fetchRooms = useCallback(async () => {
@@ -352,7 +369,7 @@ export default function PGRooms() {
     setCiDate(new Date().toISOString().split('T')[0])
     setCiMeterReading('')
     setCiRatePerUnit('10')
-    setCiDeposit(String(room.monthlyRent))
+    setCiDeposit(String(room.baseRent))
     setCheckInOpen(true)
   }
 
@@ -588,6 +605,51 @@ export default function PGRooms() {
       toast.error('Failed to update electricity reading')
     } finally {
       setElecSubmitting(false)
+    }
+  }
+
+  // ─── Rent Update handler ───
+
+  const handleRentUpdate = async () => {
+    if (!rentUpdateRoom) return
+    const newRent = parseFloat(rentUpdateNewRent) || 0
+    if (newRent <= 0) {
+      toast.error('Rent must be greater than 0')
+      return
+    }
+    if (!rentUpdateEffectiveDate) {
+      toast.error('Effective date is required')
+      return
+    }
+
+    setRentUpdateSubmitting(true)
+    try {
+      const res = await fetch(`/api/rooms/${rentUpdateRoom.id}/update-rent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newRent,
+          effectiveDate: rentUpdateEffectiveDate,
+          reason: rentUpdateReason,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update rent')
+        return
+      }
+
+      toast.success(
+        data.isBaseRentUpdate
+          ? `Default rent updated from ₹${data.oldRent} to ₹${data.newRent}!`
+          : `Rent updated from ₹${data.oldRent} to ₹${data.newRent}! ${data.guestsAffected} guest(s) affected.`
+      )
+      setRentUpdateOpen(false)
+      fetchRooms() // Refresh rooms
+    } catch {
+      toast.error('Failed to update rent')
+    } finally {
+      setRentUpdateSubmitting(false)
     }
   }
 
@@ -897,12 +959,44 @@ export default function PGRooms() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="flex items-center gap-1.5 text-gray-500">
                         <DollarSign className="size-3.5" />
-                        Monthly Rent
+                        {status === 'Vacant' ? 'Default Rent' : 'Monthly Rent'}
                       </span>
-                      <span className="font-semibold text-emerald-700">
-                        {formatCurrency(room.monthlyRent)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-emerald-700">
+                          {formatCurrency(status === 'Vacant' ? room.baseRent : room.monthlyRent)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRentUpdateRoom(room)
+                            setRentUpdateNewRent(String(status === 'Vacant' ? room.baseRent : room.monthlyRent))
+                            setRentUpdateEffectiveDate(new Date().toISOString().split('T')[0])
+                            setRentUpdateReason('')
+                            setRentUpdateOpen(true)
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* Rent change history indicator — only show for occupied rooms with rent changes */}
+                    {status === 'Occupied' && room.rentChanges && room.rentChanges.length > 0 && (
+                      <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-0.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {room.rentChanges.length} rent change{room.rentChanges.length > 1 ? 's' : ''} · base rent {formatCurrency(room.baseRent)}
+                      </div>
+                    )}
+                    {/* For vacant rooms, show base rent info if monthlyRent was different */}
+                    {status === 'Vacant' && room.baseRent !== room.monthlyRent && (
+                      <div className="flex items-center gap-1 text-[10px] text-emerald-500 mt-0.5">
+                        <DollarSign className="size-3" />
+                        Default rent: {formatCurrency(room.baseRent)}
+                      </div>
+                    )}
 
                     {/* Guest info for occupied rooms — clickable */}
                     {status === 'Occupied' && activeGuest && (
@@ -961,6 +1055,9 @@ export default function PGRooms() {
       {/* ═══════════ GUEST DETAILS DIALOG ═══════════ */}
       <Dialog open={guestDetailOpen} onOpenChange={setGuestDetailOpen}>
         <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0 gap-0">
+          {/* Visually hidden title for screen reader accessibility */}
+          <DialogTitle className="sr-only">Guest Details</DialogTitle>
+          <DialogDescription className="sr-only">View guest details and billing information</DialogDescription>
           {guestDetailLoading ? (
             <div className="p-6 space-y-4">
               <Skeleton className="h-32 w-full" />
@@ -988,7 +1085,14 @@ export default function PGRooms() {
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
               : (currentPeriod ? monthlyRent : 0)
             const previousDue = Math.max(0, totalOutstanding - currentMonthBill)
-            const totalAccruedRent = stayMonths * monthlyRent
+
+            // Calculate totalAccruedRent: sum of bill rentAmounts for billed months,
+            // plus current rent for the unbilled current period
+            const billedRentTotal = guestDetail.bills.reduce((sum, b) => sum + b.rentAmount, 0)
+            const hasCurrentBill = currentPeriodBill != null
+            const totalAccruedRent = hasCurrentBill
+              ? billedRentTotal
+              : billedRentTotal + monthlyRent
 
             // ─── Electricity details ───
             const lastElecReading = guestDetail.electricityReadings?.[0]
@@ -1133,7 +1237,7 @@ export default function PGRooms() {
                         Live Billing Status
                       </h4>
                       <span className="text-[10px] text-gray-400">
-                        {daysStayed} days · {stayMonths} months × {formatCurrency(monthlyRent)} = {formatCurrency(totalAccruedRent)} accrued
+                        {daysStayed} days · {formatCurrency(totalAccruedRent)} total accrued
                       </span>
                     </div>
 
@@ -1951,6 +2055,167 @@ export default function PGRooms() {
                 <>
                   <Zap className="mr-2 h-4 w-4" />
                   Update Reading
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ RENT UPDATE DIALOG ═══════════ */}
+      <Dialog open={rentUpdateOpen} onOpenChange={setRentUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700">
+              <DollarSign className="h-5 w-5" />
+              {rentUpdateRoom?.status === 'Vacant' ? 'Update Default Rent' : 'Update Rent'} — Room {rentUpdateRoom?.roomNo}
+            </DialogTitle>
+            <DialogDescription>
+              {rentUpdateRoom?.status === 'Vacant'
+                ? 'Change the default rent for this room. This will be the rent for the next guest.'
+                : 'Change the monthly rent. Existing bills will NOT be affected. New rent applies from the effective date.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Current rent */}
+            <Card className="border-gray-200 bg-gray-50/50">
+              <CardContent className="p-4 space-y-2 text-sm">
+                {rentUpdateRoom?.status === 'Vacant' ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Default Rent</span>
+                      <span className="font-semibold text-gray-800">{rentUpdateRoom ? formatCurrency(rentUpdateRoom.baseRent) : '—'}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      This is the rent that will apply to the next guest who checks in.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Current Monthly Rent</span>
+                      <span className="font-semibold text-gray-800">{rentUpdateRoom ? formatCurrency(rentUpdateRoom.monthlyRent) : '—'}</span>
+                    </div>
+                    {rentUpdateRoom && rentUpdateRoom.baseRent !== rentUpdateRoom.monthlyRent && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Base/Default Rent</span>
+                        <span className="text-gray-500">{formatCurrency(rentUpdateRoom.baseRent)}</span>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Base rent resets automatically when guest checks out
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* New Rent */}
+            <div className="space-y-2">
+              <Label htmlFor="rentUpdateNewRent">
+                New Monthly Rent (₹) <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="rentUpdateNewRent"
+                type="number"
+                min="1"
+                placeholder="Enter new monthly rent"
+                value={rentUpdateNewRent}
+                onChange={(e) => setRentUpdateNewRent(e.target.value)}
+                className="font-mono text-lg border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+              />
+            </div>
+
+            {/* Effective Date */}
+            <div className="space-y-2">
+              <Label htmlFor="rentUpdateEffectiveDate">
+                Effective Date <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="rentUpdateEffectiveDate"
+                type="date"
+                value={rentUpdateEffectiveDate}
+                onChange={(e) => setRentUpdateEffectiveDate(e.target.value)}
+                className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Bills for this month and after will use the new rent
+              </p>
+            </div>
+
+            {/* Reason */}
+            <div className="space-y-2">
+              <Label htmlFor="rentUpdateReason">
+                Reason (optional)
+              </Label>
+              <Input
+                id="rentUpdateReason"
+                placeholder="e.g., Rent reduction, room change..."
+                value={rentUpdateReason}
+                onChange={(e) => setRentUpdateReason(e.target.value)}
+              />
+            </div>
+
+            {/* Preview */}
+            {(() => {
+              const newRent = parseFloat(rentUpdateNewRent) || 0
+              const oldRent = rentUpdateRoom?.monthlyRent || 0
+              if (newRent <= 0 || newRent === oldRent) return null
+              const diff = newRent - oldRent
+              return (
+                <Card className={`border ${diff > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-emerald-200 bg-emerald-50/30'}`}>
+                  <CardHeader className="pb-1 pt-3 px-4">
+                    <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                      <DollarSign className="size-3.5" />
+                      Rent Change Preview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground text-xs">Old Rent</span>
+                      <span className="font-medium text-xs">{formatCurrency(oldRent)}/mo</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground text-xs">New Rent</span>
+                      <span className="font-medium text-xs">{formatCurrency(newRent)}/mo</span>
+                    </div>
+                    <Separator className="my-1.5" />
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-xs">Difference</span>
+                      <span className={`font-bold text-xs ${diff > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {diff > 0 ? '+' : ''}{formatCurrency(diff)}/mo
+                      </span>
+                    </div>
+                    {rentUpdateEffectiveDate && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Applies from {rentUpdateEffectiveDate} onwards
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })()}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setRentUpdateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRentUpdate}
+              disabled={rentUpdateSubmitting || !rentUpdateNewRent || parseFloat(rentUpdateNewRent) <= 0 || !rentUpdateEffectiveDate}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {rentUpdateSubmitting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  Update Rent
                 </>
               )}
             </Button>

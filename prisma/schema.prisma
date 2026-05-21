@@ -13,13 +13,27 @@ model Room {
   roomNo    String   @unique
   floor     Int      @default(1)
   type      String   @default("Single") // Single, Double, Triple
-  monthlyRent Float   @default(5000)
+  baseRent  Float    @default(5000) // Room's default rent — resets to this on checkout
+  monthlyRent Float   @default(5000) // Current active rent — can be changed via rent update for current guest
   status    String   @default("Vacant") // Vacant, Occupied, Maintenance
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  guests    Guest[]
-  bills     Bill[]
+  guests       Guest[]
+  bills        Bill[]
+  rentChanges  RentChange[]
+}
+
+model RentChange {
+  id            String   @id @default(cuid())
+  roomId        String
+  oldRent       Float
+  newRent       Float
+  effectiveDate DateTime // Date from which new rent applies
+  reason        String   @default("")
+  createdAt     DateTime @default(now())
+
+  room          Room     @relation(fields: [roomId], references: [id])
 }
 
 model Guest {

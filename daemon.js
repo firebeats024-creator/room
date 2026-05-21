@@ -5,7 +5,7 @@ const path = require('path');
 const logFd = fs.openSync(path.join(__dirname, 'dev.log'), 'w');
 
 // Start Next.js
-const nextProc = spawn('node', ['node_modules/.bin/next', 'dev', '-p', '3001'], {
+const nextProc = spawn('node', ['node_modules/.bin/next', 'dev', '-p', '3001', '-H', '0.0.0.0'], {
   cwd: __dirname,
   detached: true,
   stdio: ['ignore', logFd, logFd]

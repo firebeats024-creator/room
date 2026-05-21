@@ -204,3 +204,106 @@ export function remainingDaysAfterMonths(
   const daysInCurrentMonth = new Date(Date.UTC(anniversaryYear, anniversaryMonth, 0)).getUTCDate();
   return Math.min(diffDays, daysInCurrentMonth - 1);
 }
+
+/**
+ * Calculate total accrued rent accounting for rent changes over time.
+ * For each billing period (month), uses the rent that was active during that period.
+ * 
+ * @param checkInDate - Check-in date
+ * @param currentRent - Current room monthly rent
+ * @param rentChanges - Array of rent changes sorted by effectiveDate (oldest first)
+ *   Each: { effectiveDate: string|Date, newRent: number }
+ * @param referenceDate - Reference date (defaults to current date)
+ * @returns { totalAccruedRent: number, rentBreakdown: { month, year, rent }[] }
+ */
+export function calculateAccruedRentWithChanges(
+  checkInDate: string | Date,
+  currentRent: number,
+  rentChanges: { effectiveDate: string | Date; newRent: number; oldRent: number }[],
+  referenceDate?: string | Date
+): { totalAccruedRent: number; rentBreakdown: { month: number; year: number; rent: number }[] } {
+  const checkIn = getDateComponents(checkInDate);
+  const ref = referenceDate
+    ? getDateComponents(referenceDate)
+    : getDateComponents(new Date());
+
+  const cycleDay = checkIn.day;
+
+  // The "original rent" = the rent before ANY changes
+  // If there are rent changes, the first change's oldRent is the original rent
+  // If no rent changes, the original rent = currentRent
+  const originalRent = rentChanges.length > 0
+    ? [...rentChanges].sort((a, b) => {
+        const da = getDateComponents(a.effectiveDate);
+        const db = getDateComponents(b.effectiveDate);
+        if (da.year !== db.year) return da.year - db.year;
+        return da.month - db.month;
+      })[0].oldRent
+    : currentRent;
+
+  // Determine the current billing period
+  let currentPeriodMonth = ref.month;
+  let currentPeriodYear = ref.year;
+  if (ref.day <= cycleDay) {
+    currentPeriodMonth -= 1;
+    if (currentPeriodMonth < 1) { currentPeriodMonth = 12; currentPeriodYear -= 1; }
+  }
+
+  // Build a sorted list of rent changes by effective date
+  const sortedChanges = [...rentChanges]
+    .map(rc => ({
+      date: getDateComponents(rc.effectiveDate),
+      newRent: rc.newRent,
+    }))
+    .sort((a, b) => {
+      if (a.date.year !== b.date.year) return a.date.year - b.date.year;
+      return a.date.month - b.date.month;
+    });
+
+  // Determine which rent was active for a given billing period
+  // Logic: Rent changes are sorted by date (oldest first).
+  // For a period BEFORE any change, use the "pre-change" rent.
+  // The "pre-change" rent for the first change = that change's oldRent (passed separately).
+  // For periods ON/AFTER a change, use that change's newRent.
+  const getRentForPeriod = (month: number, year: number): number => {
+    let activeRent: number | null = null;
+    for (const change of sortedChanges) {
+      if (
+        change.date.year < year ||
+        (change.date.year === year && change.date.month <= month)
+      ) {
+        activeRent = change.newRent;
+      } else {
+        break;
+      }
+    }
+    
+    // If no rent change applied to this period, use the original rent
+    // (which is the oldRent of the first change, or currentRent if no changes)
+    return activeRent ?? originalRent;
+  };
+
+  // Iterate through each billing period from check-in to current period
+  const rentBreakdown: { month: number; year: number; rent: number }[] = [];
+  let totalAccruedRent = 0;
+
+  let iterMonth = checkIn.month;
+  let iterYear = checkIn.year;
+
+  while (
+    iterYear < currentPeriodYear ||
+    (iterYear === currentPeriodYear && iterMonth <= currentPeriodMonth)
+  ) {
+    const rentForThisPeriod = getRentForPeriod(iterMonth, iterYear);
+    totalAccruedRent += rentForThisPeriod;
+    rentBreakdown.push({ month: iterMonth, year: iterYear, rent: rentForThisPeriod });
+
+    iterMonth++;
+    if (iterMonth > 12) {
+      iterMonth = 1;
+      iterYear++;
+    }
+  }
+
+  return { totalAccruedRent, rentBreakdown };
+}
