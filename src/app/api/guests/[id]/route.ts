@@ -52,6 +52,9 @@ export async function GET(
           orderBy: { readingDate: 'desc' },
           take: 1,
         },
+        memberHistory: {
+          orderBy: { effectiveDate: 'asc' },
+        },
       },
     });
 
@@ -173,6 +176,9 @@ export async function GET(
             electricityReadings: {
               orderBy: { readingDate: 'desc' },
               take: 1,
+            },
+            memberHistory: {
+              orderBy: { effectiveDate: 'asc' },
             },
           },
         });
@@ -398,6 +404,9 @@ export async function GET(
             electricityReadings: {
               orderBy: { readingDate: 'desc' },
               take: 1,
+            },
+            memberHistory: {
+              orderBy: { effectiveDate: 'asc' },
             },
           },
         });

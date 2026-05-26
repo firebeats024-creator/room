@@ -569,62 +569,72 @@ export default function PgDashboard() {
               <div
                 key={guest.id}
                 onClick={() => openGuestDetail(guest.id)}
-                className="rounded-xl border border-red-100 bg-white shadow-sm hover:shadow-md hover:border-red-300 transition-all duration-200 cursor-pointer overflow-hidden group"
+                className="rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-lg hover:border-red-200 transition-all duration-200 cursor-pointer overflow-hidden group"
               >
-                {/* Guest header — highlighted name & room */}
-                <div className="bg-gradient-to-r from-red-600 to-rose-600 px-4 py-3 text-white">
+                {/* Guest header — avatar + name + DUE badge */}
+                <div className="px-4 pt-4 pb-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex size-9 items-center justify-center rounded-full bg-white/20 text-sm font-bold shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-10 items-center justify-center rounded-full bg-red-500 text-white text-sm font-bold shrink-0">
                         {guest.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-extrabold text-[15px] truncate tracking-tight">{guest.name}</p>
-                        <p className="text-red-100 text-[12px] font-semibold">
+                        <p className="font-bold text-[16px] text-gray-900 truncate tracking-tight">{guest.name}</p>
+                        <p className="text-gray-400 text-[12px] font-medium flex items-center gap-1">
+                          <BedDouble className="h-3 w-3" />
                           Room {guest.room.roomNo} · {guest.room.type}
                         </p>
                       </div>
                     </div>
-                    <Badge className="shrink-0 text-[9px] px-1.5 py-0 bg-red-400/30 text-white border-red-300/40">
+                    <Badge className="shrink-0 text-[10px] px-2.5 py-0.5 bg-red-500 text-white border-0 rounded-full font-bold">
                       DUE
                     </Badge>
                   </div>
                 </div>
 
-                {/* Billing info */}
-                <div className="p-3 space-y-2.5">
-                  {/* Accrued / Paid summary */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatCurrency(guest.billing.totalAccruedRent)} <span className="text-emerald-700 font-semibold">accrued</span>
+                {/* Accrued / Paid summary */}
+                <div className="px-4 pb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 flex items-center gap-1.5 text-[13px]">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span className="text-gray-500 font-medium">{formatCurrency(guest.billing.totalAccruedRent)}</span>
+                      <span className="text-gray-400">accrued</span>
                     </span>
-                    <span className="text-emerald-600 font-medium">
-                      Paid: {formatCurrency(guest.billing.totalPaid)}
+                    <span className="text-emerald-600 font-semibold flex items-center gap-1 text-[13px]">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      {formatCurrency(guest.billing.totalPaid)} paid
                     </span>
                   </div>
+                </div>
 
-                  {/* 3-column billing cards */}
+                {/* 3-column billing cards */}
+                <div className="px-4 pb-3">
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-lg bg-red-50 border border-red-100 p-2 text-center">
-                      <p className="text-[10px] text-red-400 mb-0.5">Current Bill</p>
-                      <p className="text-xs font-bold text-red-700">{formatCurrency(guest.billing.currentMonthBill)}</p>
+                    <div className="rounded-xl bg-pink-50 p-2.5 text-center">
+                      <p className="text-[10px] font-semibold text-pink-400 mb-1 tracking-wide">CURRENT BILL</p>
+                      <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.currentMonthBill)}</p>
                     </div>
-                    <div className="rounded-lg bg-amber-50 border border-amber-100 p-2 text-center">
-                      <p className="text-[10px] text-amber-500 mb-0.5">Previous Due</p>
-                      <p className="text-xs font-bold text-amber-700">{formatCurrency(guest.billing.previousDue)}</p>
+                    <div className="rounded-xl bg-yellow-50 p-2.5 text-center">
+                      <p className="text-[10px] font-semibold text-yellow-500 mb-1 tracking-wide">PREVIOUS DUE</p>
+                      <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.previousDue)}</p>
                     </div>
-                    <div className="rounded-lg bg-orange-50 border border-orange-100 p-2 text-center">
-                      <p className="text-[10px] text-orange-500 mb-0.5">Total Due</p>
-                      <p className="text-xs font-bold text-orange-700">{formatCurrency(guest.billing.totalOutstanding)}</p>
+                    <div className="rounded-xl bg-red-50 p-2.5 text-center">
+                      <p className="text-[10px] font-semibold text-red-400 mb-1 tracking-wide">TOTAL DUE</p>
+                      <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.totalOutstanding)}</p>
                     </div>
                   </div>
+                </div>
 
-                  {/* Stay info row */}
-                  <div className="flex items-center justify-between text-[11px] text-gray-400 border-t border-gray-50 pt-2">
-                    <span>Check-in: {formatDate(guest.checkInDate)}</span>
-                    <span>Cycle: {guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)}</span>
-                  </div>
+                {/* Footer — Check-in & Cycle */}
+                <div className="px-4 py-2.5 border-t border-gray-50 flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-1.5 text-[12px]">
+                    <Calendar className="h-3 w-3" />
+                    <span className="text-gray-500">Check-in:</span> {formatDate(guest.checkInDate)}
+                  </span>
+                  <span className="text-gray-400 flex items-center gap-1.5 text-[12px]">
+                    <Clock className="h-3 w-3" />
+                    <span className="text-gray-500">Cycle:</span> {guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)}
+                  </span>
                 </div>
               </div>
             ))}

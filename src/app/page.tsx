@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -14,12 +14,14 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Building2, LayoutDashboard, BedDouble, Users, Receipt, ShieldCheck, Settings, Download, Code2, FilePlus2, Database, RefreshCw, Trash2, AlertTriangle } from 'lucide-react'
+import { Building2, LayoutDashboard, BedDouble, Users, Receipt, ShieldCheck, Settings, Download, Code2, FilePlus2, Database, RefreshCw, Trash2, AlertTriangle, LogOut } from 'lucide-react'
 import PgDashboard from '@/components/pg-dashboard'
 import PgRooms from '@/components/pg-rooms'
 import PgGuests from '@/components/pg-guests'
 import PgBilling from '@/components/pg-billing'
 import PgDeposits from '@/components/pg-deposits'
+import AdminLogin from '@/components/admin-login'
+import AdminManager from '@/components/admin-manager'
 import { toast } from 'sonner'
 
 const navItems = [
@@ -31,6 +33,10 @@ const navItems = [
 ]
 
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecking, setAuthChecking] = useState(true)
+  const [adminName, setAdminName] = useState('Admin')
+  const [adminId, setAdminId] = useState('')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [showSettings, setShowSettings] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -44,6 +50,75 @@ export default function Home() {
   const [step2Open, setStep2Open] = useState(false)
   const [step2Action, setStep2Action] = useState<'reset' | 'source' | null>(null)
   const [confirmText, setConfirmText] = useState('')
+
+  // Helper: get auth headers
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  // Check auth on mount
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const headers = getAuthHeaders()
+      const res = await fetch('/api/auth/check', { headers })
+      const data = await res.json()
+      if (data.authenticated) {
+        setIsAuthenticated(true)
+        setAdminName(data.user?.name || localStorage.getItem('admin_name') || 'Admin')
+        setAdminId(data.user?.adminId || '')
+      } else {
+        setIsAuthenticated(false)
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_name')
+      }
+    } catch {
+      setIsAuthenticated(false)
+    } finally {
+      setAuthChecking(false)
+    }
+  }
+
+  const handleLoginSuccess = (token: string, name: string) => {
+    setIsAuthenticated(true)
+    setAdminName(name)
+    // Get adminId from token
+    checkAuth()
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_name')
+    setIsAuthenticated(false)
+    setAdminName('Admin')
+    toast.success('Logged out successfully')
+  }
+
+  // Show loading while checking auth
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
+        <div className="flex items-center gap-2 text-emerald-600">
+          <RefreshCw className="h-5 w-5 animate-spin" />
+          <span className="text-sm font-medium">Loading...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <AdminLogin onLoginSuccess={handleLoginSuccess} />
+  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -203,58 +278,102 @@ export default function Home() {
               </h1>
             </div>
 
-            {/* Settings Dropdown - hidden by default, shown on logo click */}
-            {showSettings && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="flex items-center gap-2">
+              {/* Admin name badge */}
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 rounded-full px-2.5 py-1">
+                <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                <span className="font-medium text-gray-700">{adminName}</span>
+              </div>
+
+              {/* Settings & Admin button - always visible */}
+              <Button
+                variant={showSettings ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setShowSettings(prev => !prev)}
+                className={`h-8 gap-1.5 text-xs ${
+                  showSettings
+                    ? 'bg-red-600 hover:bg-red-700 text-white border-red-600'
+                    : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400'
+                }`}
+              >
+                {showSettings ? <Building2 className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">{showSettings ? 'Close' : 'Admin'}</span>
+              </Button>
+
+              {/* Settings Dropdown - visible when in settings mode */}
+              {showSettings && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
+                    <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleGenerateBills}
+                    disabled={generating}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <FilePlus2 className={`h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
+                    <span>{generating ? 'Generating...' : 'Generate Bills'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => openStep1('source')}
+                    disabled={downloading}
+                    className="gap-2 cursor-pointer text-amber-700 dark:text-amber-400"
+                  >
+                    <Code2 className={`h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
+                    <span>{downloading ? 'Zipping...' : 'Source Code'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => openStep1('reset')}
+                    disabled={seeding}
+                    variant="destructive"
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Database className={`h-4 w-4 ${seeding ? 'animate-spin' : ''}`} />
+                    <span>{seeding ? 'Resetting...' : 'Reset Data'}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="gap-2 cursor-pointer text-red-600 dark:text-red-400"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              )}
+
+              {/* Logout button - visible when NOT in settings mode */}
+              {!showSettings && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
-                  className="h-9 w-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400"
+                  onClick={handleLogout}
+                  className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50"
+                  title="Logout"
                 >
-                  <Settings className="h-4.5 w-4.5" />
+                  <LogOut className="h-4 w-4" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleExport}
-                  disabled={exporting}
-                  className="gap-2 cursor-pointer"
-                >
-                  <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
-                  <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleGenerateBills}
-                  disabled={generating}
-                  className="gap-2 cursor-pointer"
-                >
-                  <FilePlus2 className={`h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
-                  <span>{generating ? 'Generating...' : 'Generate Bills'}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => openStep1('source')}
-                  disabled={downloading}
-                  className="gap-2 cursor-pointer text-amber-700 dark:text-amber-400"
-                >
-                  <Code2 className={`h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
-                  <span>{downloading ? 'Zipping...' : 'Source Code'}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => openStep1('reset')}
-                  disabled={seeding}
-                  variant="destructive"
-                  className="gap-2 cursor-pointer"
-                >
-                  <Database className={`h-4 w-4 ${seeding ? 'animate-spin' : ''}`} />
-                  <span>{seeding ? 'Resetting...' : 'Reset Data'}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -338,11 +457,27 @@ export default function Home() {
       {/* Content */}
       <main className="flex-1 pb-24 sm:pb-24">
         <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-          {activeTab === 'dashboard' && <PgDashboard />}
-          {activeTab === 'rooms' && <PgRooms />}
-          {activeTab === 'guests' && <PgGuests />}
-          {activeTab === 'billing' && <PgBilling />}
-          {activeTab === 'deposits' && <PgDeposits />}
+          {showSettings ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <Settings className="h-5 w-5" />
+                <h2 className="text-lg font-bold">Settings & Admin</h2>
+              </div>
+              <AdminManager
+                token={localStorage.getItem('admin_token') || ''}
+                currentAdminName={adminName}
+                currentAdminId={adminId}
+              />
+            </div>
+          ) : (
+            <>
+              {activeTab === 'dashboard' && <PgDashboard />}
+              {activeTab === 'rooms' && <PgRooms />}
+              {activeTab === 'guests' && <PgGuests />}
+              {activeTab === 'billing' && <PgBilling />}
+              {activeTab === 'deposits' && <PgDeposits />}
+            </>
+          )}
         </div>
       </main>
 

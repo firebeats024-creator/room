@@ -58,6 +58,7 @@ model Guest {
   securityDeposit SecurityDeposit?
   bills           Bill[]
   electricityReadings ElectricityReading[]
+  memberHistory   MemberHistory[]
 }
 
 model SecurityDeposit {
@@ -111,4 +112,25 @@ model ElectricityReading {
   createdAt   DateTime @default(now())
 
   guest       Guest    @relation(fields: [guestId], references: [id])
+}
+
+model MemberHistory {
+  id            String   @id @default(cuid())
+  guestId       String
+  oldMemberCount Int
+  newMemberCount Int
+  effectiveDate DateTime // Date from which new member count applies
+  reason        String   @default("") // e.g. "1 member left"
+  createdAt     DateTime @default(now())
+
+  guest         Guest    @relation(fields: [guestId], references: [id])
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String   // hashed password
+  name      String   @default("Admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

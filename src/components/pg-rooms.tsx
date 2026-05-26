@@ -123,6 +123,15 @@ interface ElectricityReading {
   readingDate: string
 }
 
+interface MemberHistoryEntry {
+  id: string
+  oldMemberCount: number
+  newMemberCount: number
+  effectiveDate: string
+  reason: string
+  createdAt: string
+}
+
 interface GuestFull {
   id: string
   name: string
@@ -150,6 +159,7 @@ interface GuestFull {
   securityDeposit: SecurityDeposit | null
   bills: GuestBill[]
   electricityReadings: ElectricityReading[]
+  memberHistory: MemberHistoryEntry[]
 }
 
 type RoomStatus = 'Vacant' | 'Occupied' | 'Maintenance'
@@ -277,6 +287,13 @@ export default function PGRooms() {
   const [rentUpdateEffectiveDate, setRentUpdateEffectiveDate] = useState('')
   const [rentUpdateReason, setRentUpdateReason] = useState('')
   const [rentUpdateSubmitting, setRentUpdateSubmitting] = useState(false)
+
+  // Member Update dialog state
+  const [memberUpdateOpen, setMemberUpdateOpen] = useState(false)
+  const [memberUpdateNewCount, setMemberUpdateNewCount] = useState('')
+  const [memberUpdateEffectiveDate, setMemberUpdateEffectiveDate] = useState('')
+  const [memberUpdateReason, setMemberUpdateReason] = useState('')
+  const [memberUpdateSubmitting, setMemberUpdateSubmitting] = useState(false)
 
   // ─── Fetch rooms ───
 
@@ -653,6 +670,59 @@ export default function PGRooms() {
     }
   }
 
+  // ─── Member Update handler ───
+
+  const handleMemberUpdate = async () => {
+    if (!guestDetail) return
+    const newCount = parseInt(memberUpdateNewCount) || 0
+    if (newCount < 1) {
+      toast.error('Member count must be at least 1')
+      return
+    }
+    if (newCount === guestDetail.totalMembers) {
+      toast.error('New member count is same as current')
+      return
+    }
+    if (!memberUpdateEffectiveDate) {
+      toast.error('Effective date is required')
+      return
+    }
+
+    setMemberUpdateSubmitting(true)
+    try {
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guestId: guestDetail.id,
+          newMemberCount: newCount,
+          effectiveDate: memberUpdateEffectiveDate,
+          reason: memberUpdateReason,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update members')
+        return
+      }
+
+      toast.success(data.message || `Members updated: ${data.oldMemberCount} → ${data.newMemberCount}`)
+      setMemberUpdateOpen(false)
+
+      // Refresh guest details
+      const refreshRes = await fetch(`/api/guests/${guestDetail.id}`)
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes.json()
+        setGuestDetail(refreshed)
+      }
+      fetchRooms()
+    } catch {
+      toast.error('Failed to update members')
+    } finally {
+      setMemberUpdateSubmitting(false)
+    }
+  }
+
   // ─── Download Receipt handler ───
 
   const handleDownloadReceipt = async (billId: string) => {
@@ -693,7 +763,7 @@ export default function PGRooms() {
                 Rooms Management
               </h1>
               <p className="text-sm text-gray-500">
-                Manage your PG hostel rooms
+                Manage your rooms
               </p>
             </div>
           </div>
@@ -1160,7 +1230,25 @@ export default function PGRooms() {
                     </div>
                     <div className="flex justify-between sm:block">
                       <span className="text-gray-400 text-xs sm:text-sm">Members</span>
-                      <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</p>
+                      <div className="flex items-center gap-1.5 sm:mt-0.5">
+                        <p className="font-medium text-gray-800">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</p>
+                        {isLive && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMemberUpdateNewCount(String(guestDetail.totalMembers))
+                              setMemberUpdateEffectiveDate(new Date().toISOString().split('T')[0])
+                              setMemberUpdateReason('')
+                              setMemberUpdateOpen(true)
+                            }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex justify-between sm:block">
                       <span className="text-gray-400 text-xs sm:text-sm">Emergency Contact</span>
@@ -1383,6 +1471,48 @@ export default function PGRooms() {
                             </Button>
                           </div>
                         ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══ SECTION 6: Member History ═══ */}
+                {guestDetail.memberHistory && guestDetail.memberHistory.length > 0 && (
+                  <div className="px-5 py-4 space-y-3">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5" />
+                      Member History
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {[...guestDetail.memberHistory]
+                        .sort((a, b) => {
+                          const da = new Date(a.effectiveDate).getTime()
+                          const db2 = new Date(b.effectiveDate).getTime()
+                          return db2 - da
+                        })
+                        .map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <Badge className={`text-[9px] px-1.5 py-0 ${
+                                entry.newMemberCount < entry.oldMemberCount
+                                  ? 'bg-red-100 text-red-700 border-red-200'
+                                  : 'bg-blue-100 text-blue-700 border-blue-200'
+                              }`}>
+                                {entry.oldMemberCount} → {entry.newMemberCount}
+                              </Badge>
+                              <span className="text-sm font-medium text-gray-800">
+                                {formatDate(entry.effectiveDate)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                              {entry.reason && <span>{entry.reason}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -2216,6 +2346,142 @@ export default function PGRooms() {
                 <>
                   <DollarSign className="mr-2 h-4 w-4" />
                   Update Rent
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ MEMBER UPDATE DIALOG ═══════════ */}
+      <Dialog open={memberUpdateOpen} onOpenChange={setMemberUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700">
+              <Users className="h-5 w-5" />
+              Update Members — {guestDetail?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Change the number of members in this room. Rent remains unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {guestDetail && (
+            <div className="space-y-4 py-2">
+              {/* Current member info */}
+              <Card className="border-blue-200 bg-blue-50/30">
+                <CardContent className="p-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Members</span>
+                    <span className="font-semibold text-gray-800">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Rent</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(guestDetail.room.monthlyRent)}/mo <span className="text-[10px] text-muted-foreground font-normal">(unchanged)</span></span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* New Member Count */}
+              <div className="space-y-2">
+                <Label htmlFor="memberUpdateNewCount">
+                  New Member Count <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="memberUpdateNewCount"
+                  type="number"
+                  min="1"
+                  max="20"
+                  placeholder="Enter new member count"
+                  value={memberUpdateNewCount}
+                  onChange={(e) => setMemberUpdateNewCount(e.target.value)}
+                  className="font-mono text-lg border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                />
+              </div>
+
+              {/* Effective Date */}
+              <div className="space-y-2">
+                <Label htmlFor="memberUpdateEffectiveDate">
+                  Effective Date <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="memberUpdateEffectiveDate"
+                  type="date"
+                  value={memberUpdateEffectiveDate}
+                  onChange={(e) => setMemberUpdateEffectiveDate(e.target.value)}
+                  className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  The new member count will be recorded from this date
+                </p>
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-2">
+                <Label htmlFor="memberUpdateReason">
+                  Reason (optional)
+                </Label>
+                <Input
+                  id="memberUpdateReason"
+                  placeholder="e.g., 1 member left, 2 members added..."
+                  value={memberUpdateReason}
+                  onChange={(e) => setMemberUpdateReason(e.target.value)}
+                />
+              </div>
+
+              {/* Preview */}
+              {(() => {
+                const newCount = parseInt(memberUpdateNewCount) || 0
+                const oldCount = guestDetail.totalMembers
+                if (newCount < 1 || newCount === oldCount) return null
+                const change = newCount - oldCount
+                return (
+                  <Card className="border-blue-200 bg-blue-50/30">
+                    <CardHeader className="pb-1 pt-3 px-4">
+                      <CardTitle className="text-xs font-semibold flex items-center gap-1.5">
+                        <Users className="size-3.5" />
+                        Member Change Preview
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3 space-y-1.5 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground text-xs">Members</span>
+                        <span className="font-medium text-xs">{oldCount} → {newCount} ({change > 0 ? '+' : ''}{change})</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground text-xs">Rent</span>
+                        <span className="font-medium text-xs">{formatCurrency(guestDetail.room.monthlyRent)}/mo (no change)</span>
+                      </div>
+                      {memberUpdateEffectiveDate && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Applies from {memberUpdateEffectiveDate} onwards
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setMemberUpdateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleMemberUpdate}
+              disabled={memberUpdateSubmitting || !memberUpdateNewCount || parseInt(memberUpdateNewCount) < 1 || parseInt(memberUpdateNewCount) === guestDetail?.totalMembers || !memberUpdateEffectiveDate}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {memberUpdateSubmitting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Users className="mr-2 h-4 w-4" />
+                  Update Members
                 </>
               )}
             </Button>

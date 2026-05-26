@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
   allowedDevOrigins: [
     // Allow preview panel origins
+    ".space-z.ai",
     "space-z.ai",
     "localhost",
   ],
