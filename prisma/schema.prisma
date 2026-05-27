@@ -39,6 +39,7 @@ model RentChange {
 model Guest {
   id              String   @id @default(cuid())
   name            String
+  nameHindi       String   @default("")
   phone           String   @default("")
   aadhaarNo       String   @default("")
   emergencyContact String  @default("")

@@ -53,6 +53,7 @@ import {
   FileDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useLanguage } from '@/lib/i18n'
 import {
   calculateStayMonths,
   getDateComponents,
@@ -65,6 +66,7 @@ import {
 interface GuestBasic {
   id: string
   name: string
+  nameHindi: string
   checkInDate: string
 }
 
@@ -135,6 +137,7 @@ interface MemberHistoryEntry {
 interface GuestFull {
   id: string
   name: string
+  nameHindi: string
   phone: string
   aadhaarNo: string
   emergencyContact: string
@@ -171,20 +174,7 @@ const MONTH_NAMES = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ]
 
-const statusConfig: Record<RoomStatus, { label: string; className: string }> = {
-  Vacant: {
-    label: 'Vacant',
-    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100',
-  },
-  Occupied: {
-    label: 'Occupied',
-    className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100',
-  },
-  Maintenance: {
-    label: 'Maintenance',
-    className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100',
-  },
-}
+// statusConfig moved inside the component to use t() for i18n
 
 // ─── Helpers ───
 
@@ -227,6 +217,23 @@ function RoomCardSkeleton() {
 // ─── Component ───
 
 export default function PGRooms() {
+  const { t, getGuestName } = useLanguage()
+
+  const statusConfig: Record<RoomStatus, { label: string; className: string }> = {
+    Vacant: {
+      label: t('status_vacant'),
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100',
+    },
+    Occupied: {
+      label: t('status_occupied'),
+      className: 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100',
+    },
+    Maintenance: {
+      label: t('status_maintenance'),
+      className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-100',
+    },
+  }
+
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -268,6 +275,7 @@ export default function PGRooms() {
   const [checkInRoom, setCheckInRoom] = useState<Room | null>(null)
   const [checkInSubmitting, setCheckInSubmitting] = useState(false)
   const [ciName, setCiName] = useState('')
+  const [ciNameHindi, setCiNameHindi] = useState('')
   const [ciPhone, setCiPhone] = useState('')
   const [ciAadhaar, setCiAadhaar] = useState('')
   const [ciEmergency, setCiEmergency] = useState('')
@@ -376,6 +384,7 @@ export default function PGRooms() {
   const openCheckIn = (room: Room) => {
     setCheckInRoom(room)
     setCiName('')
+    setCiNameHindi('')
     setCiPhone('')
     setCiAadhaar('')
     setCiEmergency('')
@@ -404,6 +413,7 @@ export default function PGRooms() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: ciName.trim(),
+          nameHindi: ciNameHindi.trim(),
           phone: ciPhone.trim(),
           aadhaarNo: ciAadhaar.trim(),
           emergencyContact: ciEmergency.trim(),
@@ -760,10 +770,10 @@ export default function PGRooms() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                Rooms Management
+                {t('rooms_management')}
               </h1>
               <p className="text-sm text-gray-500">
-                Manage your rooms
+                {t('rooms_manage')}
               </p>
             </div>
           </div>
@@ -779,7 +789,7 @@ export default function PGRooms() {
               <RefreshCw
                 className={`size-3.5 ${loading ? 'animate-spin' : ''}`}
               />
-              Refresh
+              {t('rooms_refresh')}
             </Button>
 
             <Dialog open={dialogOpen} onOpenChange={(open) => {
@@ -788,13 +798,13 @@ export default function PGRooms() {
             }}>
               <Button className="gap-1.5 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700" onClick={() => setDialogOpen(true)}>
                 <Plus className="size-4" />
-                Add Room
+                {t('rooms_add_room')}
               </Button>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-emerald-800">
                     <Bed className="size-5" />
-                    Add New Room
+                    {t('rooms_add_new_room')}
                   </DialogTitle>
                   <DialogDescription>
                     Enter the details for the new room. Room number must be unique.
@@ -804,7 +814,7 @@ export default function PGRooms() {
                 <div className="grid gap-4 py-2">
                   <div className="grid gap-2">
                     <Label htmlFor="roomNo">
-                      Room Number <span className="text-red-500">*</span>
+                      {t('rooms_room_no')} <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="roomNo"
@@ -816,7 +826,7 @@ export default function PGRooms() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="floor">Floor</Label>
+                    <Label htmlFor="floor">{t('rooms_floor')}</Label>
                     <Input
                       id="floor"
                       type="number"
@@ -829,21 +839,21 @@ export default function PGRooms() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label>Room Type</Label>
+                    <Label>{t('rooms_room_type')}</Label>
                     <Select value={formType} onValueChange={setFormType}>
                       <SelectTrigger className="w-full border-emerald-200 focus:border-emerald-400 focus:ring-emerald-400/30">
-                        <SelectValue placeholder="Select type" />
+                        <SelectValue placeholder={t('rooms_select_type')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Single">Single</SelectItem>
-                        <SelectItem value="Double">Double</SelectItem>
-                        <SelectItem value="Triple">Triple</SelectItem>
+                        <SelectItem value="Single">{t('rooms_single')}</SelectItem>
+                        <SelectItem value="Double">{t('rooms_double')}</SelectItem>
+                        <SelectItem value="Triple">{t('rooms_triple')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="rent">Monthly Rent (INR)</Label>
+                    <Label htmlFor="rent">{t('rooms_monthly_rent')}</Label>
                     <Input
                       id="rent"
                       type="number"
@@ -865,14 +875,14 @@ export default function PGRooms() {
                     }}
                     className="border-emerald-200"
                   >
-                    Cancel
+                    {t('rooms_cancel')}
                   </Button>
                   <Button
                     onClick={handleAddRoom}
                     disabled={submitting || !formRoomNo.trim()}
                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                   >
-                    {submitting ? 'Adding...' : 'Add Room'}
+                    {submitting ? t('rooms_adding') : t('rooms_add_room')}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -889,7 +899,7 @@ export default function PGRooms() {
                   <Home className="size-4 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Total Rooms</p>
+                  <p className="text-xs font-medium text-gray-500">{t('rooms_total_rooms')}</p>
                   <p className="text-xl font-bold text-gray-900">{totalRooms}</p>
                 </div>
               </div>
@@ -903,7 +913,7 @@ export default function PGRooms() {
                   <User className="size-4 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Occupied</p>
+                  <p className="text-xs font-medium text-gray-500">{t('rooms_occupied')}</p>
                   <p className="text-xl font-bold text-amber-700">{occupiedCount}</p>
                 </div>
               </div>
@@ -917,7 +927,7 @@ export default function PGRooms() {
                   <Bed className="size-4 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Vacant</p>
+                  <p className="text-xs font-medium text-gray-500">{t('rooms_vacant')}</p>
                   <p className="text-xl font-bold text-emerald-700">{vacantCount}</p>
                 </div>
               </div>
@@ -931,7 +941,7 @@ export default function PGRooms() {
                   <RefreshCw className="size-4 text-red-500" />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Maintenance</p>
+                  <p className="text-xs font-medium text-gray-500">{t('rooms_maintenance')}</p>
                   <p className="text-xl font-bold text-red-600">{maintenanceCount}</p>
                 </div>
               </div>
@@ -953,17 +963,17 @@ export default function PGRooms() {
                 <Home className="size-8 text-emerald-400" />
               </div>
               <h3 className="mb-1 text-lg font-semibold text-gray-700">
-                No rooms yet
+                {t('rooms_no_rooms')}
               </h3>
               <p className="mb-4 text-sm text-gray-500">
-                Get started by adding your first room
+                {t('rooms_get_started')}
               </p>
               <Button
                 onClick={() => setDialogOpen(true)}
                 className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <Plus className="size-4" />
-                Add Room
+                {t('rooms_add_room')}
               </Button>
             </CardContent>
           </Card>
@@ -1006,7 +1016,7 @@ export default function PGRooms() {
                         >
                           {room.roomNo}
                         </div>
-                        <span className="text-gray-800">Room {room.roomNo}</span>
+                        <span className="text-gray-800">{t('rooms_room')} {room.roomNo}</span>
                       </CardTitle>
                       <Badge
                         variant="outline"
@@ -1021,7 +1031,7 @@ export default function PGRooms() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="flex items-center gap-1.5 text-gray-500">
                         <Bed className="size-3.5" />
-                        Floor {room.floor}
+                        {t('rooms_floor')} {room.floor}
                       </span>
                       <span className="text-gray-600">{room.type}</span>
                     </div>
@@ -1029,7 +1039,7 @@ export default function PGRooms() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="flex items-center gap-1.5 text-gray-500">
                         <DollarSign className="size-3.5" />
-                        {status === 'Vacant' ? 'Default Rent' : 'Monthly Rent'}
+                        {status === 'Vacant' ? t('rooms_default_rent') : t('rooms_rent')}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-emerald-700">
@@ -1057,14 +1067,14 @@ export default function PGRooms() {
                     {status === 'Occupied' && room.rentChanges && room.rentChanges.length > 0 && (
                       <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-0.5">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        {room.rentChanges.length} rent change{room.rentChanges.length > 1 ? 's' : ''} · base rent {formatCurrency(room.baseRent)}
+                        {room.rentChanges.length} {room.rentChanges.length > 1 ? t('rooms_rent_changes_plural') : t('rooms_rent_changes')} · {t('rooms_base_rent')} {formatCurrency(room.baseRent)}
                       </div>
                     )}
                     {/* For vacant rooms, show base rent info if monthlyRent was different */}
                     {status === 'Vacant' && room.baseRent !== room.monthlyRent && (
                       <div className="flex items-center gap-1 text-[10px] text-emerald-500 mt-0.5">
                         <DollarSign className="size-3" />
-                        Default rent: {formatCurrency(room.baseRent)}
+                        {t('rooms_default_rent_info')}: {formatCurrency(room.baseRent)}
                       </div>
                     )}
 
@@ -1077,15 +1087,15 @@ export default function PGRooms() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-amber-900">
-                              {activeGuest.name}
+                              {getGuestName(activeGuest.name, activeGuest.nameHindi)}
                             </p>
                             <p className="text-xs text-amber-600">
-                              Checked in: {formatDate(activeGuest.checkInDate)}
+                              {t('rooms_checked_in')}: {formatDate(activeGuest.checkInDate)}
                             </p>
                           </div>
                           <div className="flex items-center gap-1 text-xs text-amber-600 group-hover:text-amber-800 shrink-0">
                             <FileText className="size-3" />
-                            <span className="hidden sm:inline">Details</span>
+                            <span className="hidden sm:inline">{t('guest_details')}</span>
                           </div>
                         </div>
                       </div>
@@ -1097,11 +1107,11 @@ export default function PGRooms() {
                         <div className="flex items-center justify-center gap-1.5">
                           <UserPlus className="size-3.5 text-emerald-600" />
                           <p className="text-xs font-semibold text-emerald-700">
-                            Click to Check-in
+                            {t('rooms_click_checkin')}
                           </p>
                         </div>
                         <p className="text-[10px] text-emerald-500 mt-0.5">
-                          Available for booking
+                          {t('rooms_available_booking')}
                         </p>
                       </div>
                     )}
@@ -1110,7 +1120,7 @@ export default function PGRooms() {
                     {status === 'Maintenance' && (
                       <div className="mt-3 rounded-lg border border-red-100 bg-red-50/50 p-3 text-center">
                         <p className="text-xs font-medium text-red-600">
-                          Under maintenance
+                          {t('rooms_under_maintenance')}
                         </p>
                       </div>
                     )}
@@ -1187,10 +1197,10 @@ export default function PGRooms() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex size-11 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
-                        {guestDetail.name.charAt(0).toUpperCase()}
+                        {getGuestName(guestDetail.name, guestDetail.nameHindi).charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h3 className="text-base font-bold leading-tight">{guestDetail.name}</h3>
+                        <h3 className="text-base font-bold leading-tight">{getGuestName(guestDetail.name, guestDetail.nameHindi)}</h3>
                         <p className="text-emerald-100 text-xs mt-0.5">
                           Room {guestDetail.room.roomNo} · {guestDetail.room.type} · {formatCurrency(monthlyRent)}/mo
                         </p>
@@ -1201,7 +1211,7 @@ export default function PGRooms() {
                         ? 'bg-emerald-400/30 text-white border-emerald-300/40'
                         : 'bg-amber-400/30 text-white border-amber-300/40'
                     }`}>
-                      {isLive ? '● Live' : 'Checked Out'}
+                      {isLive ? t('guest_live') : t('guest_checked_out')}
                     </Badge>
                   </div>
                 </div>
@@ -1210,28 +1220,28 @@ export default function PGRooms() {
                 <div className="px-5 py-4 space-y-3">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5" />
-                    Personal Information
+                    {t('guest_personal_info')}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Contact</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_contact')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.phone || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Aadhaar</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_aadhaar')}</span>
                       <p className="font-medium text-gray-800 font-mono sm:mt-0.5">{guestDetail.aadhaarNo || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Occupation</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_occupation')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">
                         {guestDetail.occupation || '—'}
                         {guestDetail.workLocation && <span className="text-gray-400"> at {guestDetail.workLocation}</span>}
                       </p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Members</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_members_label')}</span>
                       <div className="flex items-center gap-1.5 sm:mt-0.5">
-                        <p className="font-medium text-gray-800">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</p>
+                        <p className="font-medium text-gray-800">{guestDetail.totalMembers} {guestDetail.totalMembers !== 1 ? t('guest_members') : t('guest_member')}</p>
                         {isLive && (
                           <Button
                             variant="ghost"
@@ -1251,11 +1261,11 @@ export default function PGRooms() {
                       </div>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Emergency Contact</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_emergency_contact')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.emergencyContact || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Security Deposit</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_security_deposit')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">
                         {formatCurrency(guestDetail.securityDeposit?.amount ?? 0)}
                         {guestDetail.securityDeposit && (
@@ -1282,20 +1292,20 @@ export default function PGRooms() {
                 <div className="px-5 py-4 bg-gray-50/60 space-y-3">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5" />
-                    Stay Details
+                    {t('guest_stay_details')}
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                      <p className="text-[10px] text-gray-400 mb-0.5">Check-in</p>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_check_in')}</p>
                       <p className="text-sm font-semibold text-gray-800">{formatDate(guestDetail.checkInDate)}</p>
                     </div>
                     <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                      <p className="text-[10px] text-gray-400 mb-0.5">Billing Cycle</p>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_billing_cycle')}</p>
                       <p className="text-sm font-semibold text-gray-800">{guestDetail.billingCycleDate}{getOrdinalSuffix(guestDetail.billingCycleDate)}</p>
                     </div>
                     {isLive && (
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Total Stay</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_total_stay')}</p>
                         <p className="text-sm font-semibold text-gray-800">
                           {stayMonths}m{stayRemainingDays > 0 ? ` ${stayRemainingDays}d` : ''}
                         </p>
@@ -1309,7 +1319,7 @@ export default function PGRooms() {
                     )}
                     {guestDetail.checkOutDate && (
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Check-out</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_check_out')}</p>
                         <p className="text-sm font-semibold text-amber-700">{formatDate(guestDetail.checkOutDate)}</p>
                       </div>
                     )}
@@ -1322,24 +1332,24 @@ export default function PGRooms() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <CreditCard className="h-3.5 w-3.5" />
-                        Live Billing Status
+                        {t('guest_live_billing_status')}
                       </h4>
                       <span className="text-[10px] text-gray-400">
-                        {daysStayed} days · {formatCurrency(totalAccruedRent)} total accrued
+                        {daysStayed} {t('guest_days')} · {formatCurrency(totalAccruedRent)} {t('guest_total_accrued')}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="rounded-lg bg-red-50 border border-red-100 p-2.5 text-center">
-                        <p className="text-[10px] text-red-400 mb-0.5">Current Bill</p>
+                        <p className="text-[10px] text-red-400 mb-0.5">{t('guest_current_bill')}</p>
                         <p className="text-sm font-bold text-red-700">{formatCurrency(currentMonthBill)}</p>
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-100 p-2.5 text-center">
-                        <p className="text-[10px] text-amber-500 mb-0.5">Previous Due</p>
+                        <p className="text-[10px] text-amber-500 mb-0.5">{t('guest_previous_due')}</p>
                         <p className="text-sm font-bold text-amber-700">{formatCurrency(previousDue)}</p>
                       </div>
                       <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2.5 text-center">
-                        <p className="text-[10px] text-emerald-500 mb-0.5">Total Paid</p>
+                        <p className="text-[10px] text-emerald-500 mb-0.5">{t('guest_total_paid')}</p>
                         <p className="text-sm font-bold text-emerald-700">{formatCurrency(totalPaid)}</p>
                       </div>
                     </div>
@@ -1347,7 +1357,7 @@ export default function PGRooms() {
                     {totalOutstanding > 0 ? (
                       <div className="flex items-center justify-between bg-red-50 rounded-lg p-3 border border-red-200">
                         <div>
-                          <p className="text-xs font-semibold text-red-800">Total Outstanding</p>
+                          <p className="text-xs font-semibold text-red-800">{t('guest_total_outstanding')}</p>
                           <p className="text-lg font-bold text-red-800">{formatCurrency(totalOutstanding)}</p>
                         </div>
                         <Button
@@ -1359,13 +1369,13 @@ export default function PGRooms() {
                           }}
                         >
                           <IndianRupee className="h-3.5 w-3.5 mr-1" />
-                          Pay Now
+                          {t('guest_pay_now')}
                         </Button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
                         <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        <span className="font-medium">All dues cleared — no outstanding balance.</span>
+                        <span className="font-medium">{t('guest_all_dues_cleared')}</span>
                       </div>
                     )}
                   </div>
@@ -1377,7 +1387,7 @@ export default function PGRooms() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <Zap className="h-3.5 w-3.5" />
-                        Electricity
+                        {t('guest_electricity')}
                       </h4>
                       <Button
                         size="sm"
@@ -1390,30 +1400,30 @@ export default function PGRooms() {
                         }}
                       >
                         <Zap className="h-3 w-3 sm:mr-1" />
-                        <span className="hidden sm:inline">Update</span>
+                        <span className="hidden sm:inline">{t('guest_update')}</span>
                       </Button>
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Opening Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_opening_unit')}</p>
                         <p className="text-sm font-bold font-mono text-emerald-700">{openingReading}</p>
                       </div>
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Current Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_current_unit')}</p>
                         <p className="text-sm font-bold font-mono text-gray-800">{currReading}</p>
                       </div>
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Rate/Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_rate_per_unit')}</p>
                         <p className="text-sm font-bold font-mono text-gray-800">₹{ratePerUnit}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-200">
                       <div className="flex items-center gap-2 text-sm">
                         <Zap className="h-4 w-4 text-amber-500" />
-                        <span className="text-gray-500">Units: <span className="font-semibold text-gray-800">{unitsConsumed}</span></span>
+                        <span className="text-gray-500">{t('guest_units')}: <span className="font-semibold text-gray-800">{unitsConsumed}</span></span>
                       </div>
                       <div className="text-sm">
-                        <span className="text-gray-500">Charge: </span>
+                        <span className="text-gray-500">{t('guest_charge')}: </span>
                         <span className="font-bold text-amber-700">{formatCurrency(elecCharge)}</span>
                       </div>
                     </div>
@@ -1425,7 +1435,7 @@ export default function PGRooms() {
                   <div className="px-5 py-4 space-y-3">
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Payment History ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
+                      {t('guest_payment_history')} ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
                     </h4>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {guestDetail.bills
@@ -1449,11 +1459,11 @@ export default function PGRooms() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                                <span>Rent: {formatCurrency(bill.rentAmount)}</span>
+                                <span>{t('guest_rent')}: {formatCurrency(bill.rentAmount)}</span>
                                 {bill.electricityCharge > 0 && (
-                                  <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
+                                  <span>{t('guest_elec')}: {formatCurrency(bill.electricityCharge)}</span>
                                 )}
-                                <span>Total: {formatCurrency(bill.totalAmount)}</span>
+                                <span>{t('guest_total')}: {formatCurrency(bill.totalAmount)}</span>
                               </div>
                             </div>
                             <Button
@@ -1520,7 +1530,7 @@ export default function PGRooms() {
                 {/* ═══ FOOTER: Close Button ═══ */}
                 <div className="px-5 py-3 bg-gray-50/60 flex justify-end">
                   <Button variant="outline" onClick={() => setGuestDetailOpen(false)} className="border-gray-200 text-gray-600 hover:bg-gray-100 text-xs h-8">
-                    Close
+                    {t('close')}
                   </Button>
                 </div>
               </div>
@@ -1539,10 +1549,10 @@ export default function PGRooms() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800">
               <UserPlus className="size-5" />
-              Check-in Guest
+              {t('checkin_guest')}
               {checkInRoom && (
                 <Badge variant="outline" className="ml-2 border-emerald-200 text-emerald-700">
-                  Room {checkInRoom.roomNo}
+                  {t('rooms_room')} {checkInRoom.roomNo}
                 </Badge>
               )}
             </DialogTitle>
@@ -1560,9 +1570,9 @@ export default function PGRooms() {
                     <Bed className="size-4 text-emerald-600" />
                   </div>
                   <div>
-                    <p className="font-semibold text-emerald-800">Room {checkInRoom.roomNo} — {checkInRoom.type}</p>
+                    <p className="font-semibold text-emerald-800">{t('rooms_room')} {checkInRoom.roomNo} — {checkInRoom.type}</p>
                     <p className="text-xs text-emerald-600">
-                      Floor {checkInRoom.floor} &middot; Rent: {formatCurrency(checkInRoom.monthlyRent)}/month
+                      {t('rooms_floor')} {checkInRoom.floor} &middot; {t('guest_rent')}: {formatCurrency(checkInRoom.monthlyRent)}/mo
                     </p>
                   </div>
                 </CardContent>
@@ -1571,7 +1581,7 @@ export default function PGRooms() {
               <div className="grid gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor="ciName">
-                    Guest Name <span className="text-red-500">*</span>
+                    {t('checkin_full_name')} <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="ciName"
@@ -1582,9 +1592,20 @@ export default function PGRooms() {
                   />
                 </div>
 
+                <div className="grid gap-2">
+                  <Label htmlFor="ciNameHindi">{t('checkin_name_hindi')}</Label>
+                  <Input
+                    id="ciNameHindi"
+                    placeholder={t('checkin_enter_name_hindi')}
+                    value={ciNameHindi}
+                    onChange={(e) => setCiNameHindi(e.target.value)}
+                    className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="ciPhone">Phone</Label>
+                    <Label htmlFor="ciPhone">{t('guest_contact')}</Label>
                     <Input
                       id="ciPhone"
                       placeholder="Mobile number"
@@ -1594,7 +1615,7 @@ export default function PGRooms() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ciAadhaar">Aadhaar No</Label>
+                    <Label htmlFor="ciAadhaar">{t('guest_aadhaar')}</Label>
                     <Input
                       id="ciAadhaar"
                       placeholder="Aadhaar number"
@@ -1607,7 +1628,7 @@ export default function PGRooms() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="ciOccupation">Occupation</Label>
+                    <Label htmlFor="ciOccupation">{t('guest_occupation')}</Label>
                     <Input
                       id="ciOccupation"
                       placeholder="Job / Work"
@@ -1617,7 +1638,7 @@ export default function PGRooms() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ciWorkLoc">Work Location</Label>
+                    <Label htmlFor="ciWorkLoc">{t('checkin_work_location')}</Label>
                     <Input
                       id="ciWorkLoc"
                       placeholder="Office / Area"
@@ -1630,7 +1651,7 @@ export default function PGRooms() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="ciEmergency">Emergency Contact</Label>
+                    <Label htmlFor="ciEmergency">{t('guest_emergency_contact')}</Label>
                     <Input
                       id="ciEmergency"
                       placeholder="Name & Phone"
@@ -1640,7 +1661,7 @@ export default function PGRooms() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ciMembers">Total Members</Label>
+                    <Label htmlFor="ciMembers">{t('checkin_total_members')}</Label>
                     <Input
                       id="ciMembers"
                       type="number"
@@ -1653,7 +1674,7 @@ export default function PGRooms() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="ciPhotoLink">Photo Link</Label>
+                  <Label htmlFor="ciPhotoLink">{t('checkin_photo_link')}</Label>
                   <Input
                     id="ciPhotoLink"
                     placeholder="URL to guest photo (optional)"
@@ -1668,7 +1689,7 @@ export default function PGRooms() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
                     <Label htmlFor="ciDate">
-                      Check-in Date <span className="text-red-500">*</span>
+                      {t('guest_check_in')} {t('checkin_date')} <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="ciDate"
@@ -1679,7 +1700,7 @@ export default function PGRooms() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="ciMeterReading">Opening Meter Reading</Label>
+                    <Label htmlFor="ciMeterReading">{t('checkin_opening_reading')}</Label>
                     <Input
                       id="ciMeterReading"
                       type="number"
@@ -1694,7 +1715,7 @@ export default function PGRooms() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="ciRatePerUnit">Rate per Unit (₹)</Label>
+                    <Label htmlFor="ciRatePerUnit">{t('checkin_rate_per_unit')}</Label>
                     <Input
                       id="ciRatePerUnit"
                       type="number"
@@ -1707,7 +1728,7 @@ export default function PGRooms() {
                   <div className="grid gap-2">
                     <Label htmlFor="ciDeposit" className="flex items-center gap-1.5">
                       <Shield className="size-3.5" />
-                      Security Deposit (₹)
+                      {t('guest_security_deposit')} (₹)
                     </Label>
                     <Input
                       id="ciDeposit"
@@ -1718,7 +1739,7 @@ export default function PGRooms() {
                       onChange={(e) => setCiDeposit(e.target.value)}
                       className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
                     />
-                    <p className="text-[10px] text-muted-foreground">Set 0 for no deposit</p>
+                    <p className="text-[10px] text-muted-foreground">{t('checkin_select_room_first')}</p>
                   </div>
                 </div>
 
@@ -1727,29 +1748,29 @@ export default function PGRooms() {
                   <CardHeader className="pb-1 pt-3 px-4">
                     <CardTitle className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
                       <CreditCard className="size-3.5" />
-                      Payment Preview
+                      {t('checkin_payment_preview')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-3 space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Monthly Rent</span>
+                      <span className="text-muted-foreground">{t('checkin_monthly_rent')}</span>
                       <span className="font-medium">{formatCurrency(checkInRoom.monthlyRent)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
-                        Security Deposit
+                        {t('guest_security_deposit')}
                         {parseFloat(ciDeposit) === checkInRoom.monthlyRent && (
-                          <span className="text-[10px] ml-1">(1 month rent)</span>
+                          <span className="text-[10px] ml-1">{t('checkin_default_rent_info')}</span>
                         )}
                         {parseFloat(ciDeposit) === 0 && (
-                          <span className="text-[10px] ml-1 text-amber-600">(No deposit)</span>
+                          <span className="text-[10px] ml-1 text-amber-600">{t('checkin_no_deposit')}</span>
                         )}
                       </span>
                       <span className="font-medium">{formatCurrency(parseFloat(ciDeposit) || 0)}</span>
                     </div>
                     <Separator className="my-1.5" />
                     <div className="flex justify-between font-semibold text-emerald-800">
-                      <span>Total Initial Payment</span>
+                      <span>{t('checkin_total_initial')}</span>
                       <span>{formatCurrency(checkInRoom.monthlyRent + (parseFloat(ciDeposit) || 0))}</span>
                     </div>
                   </CardContent>
@@ -1760,17 +1781,17 @@ export default function PGRooms() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setCheckInOpen(false)} className="border-emerald-200">
-              Cancel
+              {t('checkin_cancel')}
             </Button>
             <Button
               onClick={handleCheckIn}
               disabled={checkInSubmitting || !ciName.trim()}
               className="bg-emerald-600 text-white hover:bg-emerald-700"
             >
-              {checkInSubmitting ? 'Checking in...' : (
+              {checkInSubmitting ? t('checkin_checking_in') : (
                 <>
                   <UserPlus className="mr-1.5 size-4" />
-                  Check-in Guest
+                  {t('checkin_guest')}
                 </>
               )}
             </Button>
@@ -1784,7 +1805,7 @@ export default function PGRooms() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800">
               <IndianRupee className="h-5 w-5" />
-              Mark Bill as Paid
+              {t('pay_mark_paid')}
             </DialogTitle>
             <DialogDescription>
               Record payment for this bill
@@ -2359,7 +2380,7 @@ export default function PGRooms() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-700">
               <Users className="h-5 w-5" />
-              Update Members — {guestDetail?.name}
+              Update Members — {guestDetail ? getGuestName(guestDetail.name, guestDetail.nameHindi) : ''}
             </DialogTitle>
             <DialogDescription>
               Change the number of members in this room. Rent remains unchanged.

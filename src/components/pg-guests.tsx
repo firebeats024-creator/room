@@ -30,6 +30,7 @@ import {
   getDateComponents,
   getCurrentBillingPeriod,
 } from '@/lib/billing-utils';
+import { useLanguage } from '@/lib/i18n';
 
 // ---------- Types ----------
 
@@ -40,7 +41,7 @@ interface Room {
   type: string;
   monthlyRent: number;
   status: string;
-  guests: { id: string; name: string }[];
+  guests: { id: string; name: string; nameHindi: string }[];
 }
 
 interface GuestBill {
@@ -67,6 +68,7 @@ interface SecurityDeposit {
 interface Guest {
   id: string;
   name: string;
+  nameHindi: string;
   phone: string;
   aadhaarNo: string;
   emergencyContact: string;
@@ -153,6 +155,7 @@ const MONTH_NAMES = [
 // ---------- Component ----------
 
 export default function PgGuests() {
+  const { t, getGuestName } = useLanguage();
   const [guests, setGuests] = useState<Guest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -163,6 +166,7 @@ export default function PgGuests() {
   const [vacantRooms, setVacantRooms] = useState<Room[]>([]);
   const [checkinForm, setCheckinForm] = useState({
     name: '',
+    nameHindi: '',
     phone: '',
     aadhaarNo: '',
     emergencyContact: '',
@@ -274,11 +278,11 @@ export default function PgGuests() {
 
   const handleCheckin = async () => {
     if (!checkinForm.name.trim()) {
-      toast.error('Guest name is required');
+      toast.error(t('checkin_name_required'));
       return;
     }
     if (!checkinForm.roomId) {
-      toast.error('Please select a room');
+      toast.error(t('checkin_room_required'));
       return;
     }
 
@@ -289,6 +293,7 @@ export default function PgGuests() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: checkinForm.name.trim(),
+          nameHindi: checkinForm.nameHindi.trim(),
           phone: checkinForm.phone.trim(),
           aadhaarNo: checkinForm.aadhaarNo.trim(),
           emergencyContact: checkinForm.emergencyContact.trim(),
@@ -419,7 +424,7 @@ export default function PgGuests() {
         return;
       }
 
-      toast.success(`${checkoutGuest.name} checked out successfully!`);
+      toast.success(`${getGuestName(checkoutGuest.name, checkoutGuest.nameHindi)} ${t('checkout_success')}`);
       setCheckoutOpen(false);
       setCheckoutResult(data.summary);
       setResultOpen(true);
@@ -446,10 +451,10 @@ export default function PgGuests() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
-            Guests Management
+            {t('guests_management')}
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Manage check-in, check-out and guest records
+            {t('guests_manage')}
           </p>
         </div>
         <Button
@@ -458,7 +463,7 @@ export default function PgGuests() {
           size="lg"
         >
           <UserPlus className="mr-2 h-5 w-5" />
-          Check-in New Guest
+          {t('guests_checkin_new')}
         </Button>
       </div>
 
@@ -469,19 +474,19 @@ export default function PgGuests() {
             value="all"
             className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
           >
-            All ({guests.length})
+            {t('guests_all')} ({guests.length})
           </TabsTrigger>
           <TabsTrigger
             value="live"
             className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
           >
-            Live ({liveCount})
+            {t('guests_live')} ({liveCount})
           </TabsTrigger>
           <TabsTrigger
             value="checkedout"
             className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
           >
-            Checked-out ({checkedOutCount})
+            {t('guests_checkedout')} ({checkedOutCount})
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -505,33 +510,35 @@ export default function PgGuests() {
           ) : filteredGuests.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Home className="h-12 w-12 mb-3 opacity-40" />
-              <p className="text-lg font-medium">No guests found</p>
+              <p className="text-lg font-medium">{t('guests_no_guests')}</p>
               <p className="text-sm">
                 {activeTab === 'all'
-                  ? 'Check in a new guest to get started'
-                  : `No ${activeTab === 'live' ? 'live' : 'checked-out'} guests`}
+                  ? t('guests_checkin_start')
+                  : activeTab === 'live'
+                    ? t('guests_no_live')
+                    : t('guests_no_checkout')}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30">
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Name</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Phone</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Room No</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Check-in Date</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Billing Cycle</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Status</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Pending</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Overdue</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Paid</TableHead>
-                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Actions</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_name')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_phone')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_room_no')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_checkin_date')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_billing_cycle')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('guests_status')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('guests_pending')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('guests_overdue')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('guests_paid')}</TableHead>
+                  <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('guests_actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredGuests.map((guest) => (
                   <TableRow key={guest.id} className="group">
-                    <TableCell className="font-medium">{guest.name}</TableCell>
+                    <TableCell className="font-medium">{getGuestName(guest.name, guest.nameHindi)}</TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5 text-sm">
                         <Phone className="h-3.5 w-3.5 text-muted-foreground" />
@@ -550,16 +557,16 @@ export default function PgGuests() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">{guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)} of month</span>
+                      <span className="text-sm">{guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)} {t('guests_of_month')}</span>
                     </TableCell>
                     <TableCell>
                       {guest.status === 'Live' ? (
                         <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100">
-                          Live
+                          {t('guests_live')}
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="text-gray-600 dark:text-gray-400">
-                          Checked-out
+                          {t('guests_checkedout')}
                         </Badge>
                       )}
                     </TableCell>
@@ -611,7 +618,7 @@ export default function PgGuests() {
                             className="text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
                           >
                             <LogOut className="h-3.5 w-3.5 mr-1" />
-                            Check-out
+                            {t('guests_checkout')}
                           </Button>
                         )}
                         <Button
@@ -621,7 +628,7 @@ export default function PgGuests() {
                           className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                         >
                           <Eye className="h-3.5 w-3.5 mr-1" />
-                          Details
+                          {t('guests_details')}
                         </Button>
                       </div>
                     </TableCell>
@@ -639,10 +646,10 @@ export default function PgGuests() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
               <UserPlus className="h-5 w-5" />
-              Check-in New Guest
+              {t('checkin_title')}
             </DialogTitle>
             <DialogDescription>
-              Fill in guest details and assign a room
+              {t('checkin_desc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -650,20 +657,31 @@ export default function PgGuests() {
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="guest-name">
-                Full Name <span className="text-red-500">*</span>
+                {t('checkin_full_name')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="guest-name"
-                placeholder="Enter guest name"
+                placeholder={t('checkin_enter_name')}
                 value={checkinForm.name}
                 onChange={(e) => setCheckinForm((p) => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+
+            {/* Name in Hindi */}
+            <div className="space-y-2">
+              <Label htmlFor="guest-name-hindi">{t('checkin_name_hindi')}</Label>
+              <Input
+                id="guest-name-hindi"
+                placeholder={t('checkin_enter_name_hindi')}
+                value={checkinForm.nameHindi}
+                onChange={(e) => setCheckinForm((p) => ({ ...p, nameHindi: e.target.value }))}
               />
             </div>
 
             {/* Phone & Aadhaar */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="guest-phone">Phone Number</Label>
+                <Label htmlFor="guest-phone">{t('checkin_phone')}</Label>
                 <Input
                   id="guest-phone"
                   placeholder="10-digit number"
@@ -672,7 +690,7 @@ export default function PgGuests() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="guest-aadhaar">Aadhaar No</Label>
+                <Label htmlFor="guest-aadhaar">{t('checkin_aadhaar')}</Label>
                 <Input
                   id="guest-aadhaar"
                   placeholder="12-digit Aadhaar"
@@ -684,7 +702,7 @@ export default function PgGuests() {
 
             {/* Emergency Contact */}
             <div className="space-y-2">
-              <Label htmlFor="guest-emergency">Emergency Contact</Label>
+              <Label htmlFor="guest-emergency">{t('checkin_emergency')}</Label>
               <Input
                 id="guest-emergency"
                 placeholder="Name & phone number"
@@ -698,7 +716,7 @@ export default function PgGuests() {
               <div className="space-y-2">
                 <Label htmlFor="guest-occupation" className="flex items-center gap-1.5">
                   <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
-                  Occupation
+                  {t('checkin_occupation')}
                 </Label>
                 <Input
                   id="guest-occupation"
@@ -710,7 +728,7 @@ export default function PgGuests() {
               <div className="space-y-2">
                 <Label htmlFor="guest-work-location" className="flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                  Work Location
+                  {t('checkin_work_location')}
                 </Label>
                 <Input
                   id="guest-work-location"
@@ -726,7 +744,7 @@ export default function PgGuests() {
               <div className="space-y-2">
                 <Label htmlFor="guest-total-members" className="flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                  Total Members
+                  {t('checkin_total_members')}
                 </Label>
                 <Input
                   id="guest-total-members"
@@ -736,12 +754,11 @@ export default function PgGuests() {
                   value={checkinForm.totalMembers}
                   onChange={(e) => setCheckinForm((p) => ({ ...p, totalMembers: e.target.value }))}
                 />
-                <p className="text-xs text-muted-foreground">Number of people staying in the room</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="guest-photo-link" className="flex items-center gap-1.5">
                   <Camera className="h-3.5 w-3.5 text-muted-foreground" />
-                  Photo / Aadhaar Link
+                  {t('checkin_photo_link')}
                 </Label>
                 <Input
                   id="guest-photo-link"
@@ -756,19 +773,19 @@ export default function PgGuests() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>
-                  Room <span className="text-red-500">*</span>
+                  {t('checkin_room')} <span className="text-red-500">*</span>
                 </Label>
                 <Select
                   value={checkinForm.roomId}
                   onValueChange={(v) => setCheckinForm((p) => ({ ...p, roomId: v }))}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select vacant room" />
+                    <SelectValue placeholder={t('checkin_select_room')} />
                   </SelectTrigger>
                   <SelectContent>
                     {vacantRooms.length === 0 ? (
                       <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                        No vacant rooms available
+                        {t('checkin_no_vacant')}
                       </div>
                     ) : (
                       vacantRooms.map((room) => (
@@ -781,7 +798,7 @@ export default function PgGuests() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="checkin-date">Check-in Date</Label>
+                <Label htmlFor="checkin-date">{t('checkin_date')}</Label>
                 <Input
                   id="checkin-date"
                   type="date"
@@ -794,12 +811,12 @@ export default function PgGuests() {
             {/* Electricity Details */}
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
-                Electricity Meter Details
+                <Zap className="h-4 w-4" />
+                {t('checkin_electricity')}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="opening-reading" className="text-xs">Opening Meter Reading (Unit)</Label>
+                  <Label htmlFor="opening-reading" className="text-xs">{t('checkin_opening_reading')}</Label>
                   <Input
                     id="opening-reading"
                     type="number"
@@ -808,10 +825,10 @@ export default function PgGuests() {
                     onChange={(e) => setCheckinForm((p) => ({ ...p, openingMeterReading: e.target.value }))}
                     className="font-mono"
                   />
-                  <p className="text-xs text-muted-foreground">Current meter reading at check-in</p>
+                  <p className="text-xs text-muted-foreground">{t('checkin_current_meter')}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="rate-per-unit" className="text-xs">Rate per Unit (₹)</Label>
+                  <Label htmlFor="rate-per-unit" className="text-xs">{t('checkin_rate_per_unit')}</Label>
                   <Input
                     id="rate-per-unit"
                     type="number"
@@ -820,7 +837,7 @@ export default function PgGuests() {
                     onChange={(e) => setCheckinForm((p) => ({ ...p, ratePerUnit: e.target.value }))}
                     className="font-mono"
                   />
-                  <p className="text-xs text-muted-foreground">Electricity rate per unit in ₹</p>
+                  <p className="text-xs text-muted-foreground">{t('checkin_electricity_rate')}</p>
                 </div>
               </div>
             </div>
@@ -829,20 +846,20 @@ export default function PgGuests() {
             <div className="space-y-2">
               <Label htmlFor="security-deposit" className="flex items-center gap-1.5">
                 <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                Security Deposit (₹)
+                {t('checkin_security_deposit')}
               </Label>
               <Input
                 id="security-deposit"
                 type="number"
                 min="0"
-                placeholder="Default: 1 month rent"
+                placeholder={t('checkin_default_1month')}
                 value={checkinForm.securityDeposit}
                 onChange={(e) => setCheckinForm((p) => ({ ...p, securityDeposit: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
                 {selectedRoom
-                  ? `Default: ${formatCurrency(selectedRoom.monthlyRent)} (1 month rent). Set 0 for no deposit.`
-                  : 'Select a room first. Set 0 for no deposit.'}
+                  ? `${t('checkin_default_1month')}: ${formatCurrency(selectedRoom.monthlyRent)} ${t('checkin_default_rent_info')}. Set 0 ${t('checkin_no_deposit').replace(/[()]/g, '')}.`
+                  : t('checkin_select_room_first')}
               </p>
             </div>
 
@@ -854,22 +871,22 @@ export default function PgGuests() {
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                       <CreditCard className="h-4 w-4" />
-                      Payment Preview
+                      {t('checkin_payment_preview')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4 space-y-1.5 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Monthly Rent</span>
+                      <span className="text-muted-foreground">{t('checkin_monthly_rent')}</span>
                       <span className="font-medium">{formatCurrency(selectedRoom.monthlyRent)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
-                        Security Deposit
+                        {t('guest_security_deposit')}
                         {(!checkinForm.securityDeposit || parseFloat(checkinForm.securityDeposit) === selectedRoom.monthlyRent) && (
-                          <span className="text-[10px] ml-1">(1 month rent)</span>
+                          <span className="text-[10px] ml-1">{t('checkin_default_rent_info')}</span>
                         )}
                         {checkinForm.securityDeposit && parseFloat(checkinForm.securityDeposit) === 0 && (
-                          <span className="text-[10px] ml-1 text-amber-600">(No deposit)</span>
+                          <span className="text-[10px] ml-1 text-amber-600">{t('checkin_no_deposit')}</span>
                         )}
                       </span>
                       <span className="font-medium">
@@ -882,7 +899,7 @@ export default function PgGuests() {
                     </div>
                     <Separator className="my-2" />
                     <div className="flex justify-between font-semibold text-emerald-800 dark:text-emerald-200">
-                      <span>Total Initial Payment</span>
+                      <span>{t('checkin_total_initial')}</span>
                       <span>
                         {formatCurrency(
                           selectedRoom.monthlyRent +
@@ -900,7 +917,7 @@ export default function PgGuests() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCheckinOpen(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleCheckin}
@@ -910,12 +927,12 @@ export default function PgGuests() {
               {checkinSubmitting ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Checking in...
+                  {t('checkin_checking_in')}
                 </>
               ) : (
                 <>
                   <UserPlus className="mr-2 h-4 w-4" />
-                  Check-in Guest
+                  {t('checkin_guest')}
                 </>
               )}
             </Button>
@@ -929,10 +946,10 @@ export default function PgGuests() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
               <LogOut className="h-5 w-5" />
-              Check-out Guest
+              {t('checkout_title')}
             </DialogTitle>
             <DialogDescription>
-              Review charges and confirm check-out
+              {t('checkout_desc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -942,7 +959,7 @@ export default function PgGuests() {
               <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
                 <CardContent className="p-4 space-y-2">
                   <div className="flex items-center gap-2 text-lg font-semibold">
-                    {checkoutGuest.name}
+                    {getGuestName(checkoutGuest.name, checkoutGuest.nameHindi)}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -951,11 +968,11 @@ export default function PgGuests() {
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Calendar className="h-3.5 w-3.5" />
-                      Checked in: {formatDate(checkoutGuest.checkInDate)}
+                      {t('rooms_checked_in')}: {formatDate(checkoutGuest.checkInDate)}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground">Deposit: {formatCurrency(checkoutGuest.securityDeposit?.amount ?? 0)}</span>
+                      <span className="text-muted-foreground">{t('checkout_deposit')}: {formatCurrency(checkoutGuest.securityDeposit?.amount ?? 0)}</span>
                       {checkoutGuest.securityDeposit && checkoutGuest.securityDeposit.status !== 'Held' && (
                         <Badge className={`text-[10px] px-1.5 py-0 ${
                           checkoutGuest.securityDeposit.status === 'Refunded' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
@@ -977,7 +994,7 @@ export default function PgGuests() {
               {/* Checkout Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="checkout-date">Check-out Date</Label>
+                  <Label htmlFor="checkout-date">{t('checkout_date')}</Label>
                   <Input
                     id="checkout-date"
                     type="date"
@@ -986,7 +1003,7 @@ export default function PgGuests() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="meter-reading">Current Meter Reading</Label>
+                  <Label htmlFor="meter-reading">{t('checkout_meter')}</Label>
                   <Input
                     id="meter-reading"
                     type="number"
@@ -1007,7 +1024,7 @@ export default function PgGuests() {
                 <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-3 space-y-2">
                   <div className="flex items-center gap-1.5 text-sm font-semibold text-red-800 dark:text-red-300">
                     <AlertTriangle className="h-4 w-4" />
-                    Pending / Unpaid Bills ({preview.unpaidBills.length})
+                    {t('checkout_unpaid_bills')} ({preview.unpaidBills.length})
                   </div>
                   <div className="space-y-1.5 max-h-32 overflow-y-auto">
                     {preview.unpaidBills.map((bill) => (
@@ -1042,7 +1059,7 @@ export default function PgGuests() {
                   <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                        Checkout Estimate (+1 Day Rule)
+                        {t('checkout_stay_summary')} (+1 Day Rule)
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4 space-y-2 text-sm">
@@ -1052,32 +1069,32 @@ export default function PgGuests() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">
-                          Billable months ({preview.totalMonths} × {formatCurrency(checkoutGuest.room.monthlyRent)})
+                          {t('checkout_total_months')} ({preview.totalMonths} × {formatCurrency(checkoutGuest.room.monthlyRent)})
                         </span>
                         <span className="font-medium">{preview.totalMonths} month{preview.totalMonths > 1 ? 's' : ''}</span>
                       </div>
                       <Separator className="my-1" />
 
                       <div className="flex justify-between font-semibold text-amber-900 dark:text-amber-100">
-                        <span>Total Accrued Rent</span>
+                        <span>{t('checkout_total_rent')}</span>
                         <span>{formatCurrency(preview.totalRent)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Already billed</span>
+                        <span className="text-muted-foreground">{t('checkout_billed')}</span>
                         <span className="font-medium">{formatCurrency(preview.totalBilled)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Total Paid</span>
+                        <span className="text-muted-foreground">{t('checkout_paid')}</span>
                         <span className="font-medium text-emerald-700 dark:text-emerald-400">{formatCurrency(preview.totalPaid)}</span>
                       </div>
                       <div className="flex justify-between font-semibold text-red-700 dark:text-red-300">
-                        <span>Remaining Balance</span>
+                        <span>{t('checkout_remaining_rent')}</span>
                         <span>{formatCurrency(Math.max(0, preview.totalRent - preview.totalPaid))}</span>
                       </div>
 
                       {preview.remainingRent > 0 && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Unbilled rent (new bill needed)</span>
+                          <span className="text-muted-foreground">{t('checkout_remaining_rent')}</span>
                           <span className="font-medium">{formatCurrency(preview.remainingRent)}</span>
                         </div>
                       )}
@@ -1089,7 +1106,7 @@ export default function PgGuests() {
                       {preview.unitsConsumed > 0 && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">
-                            Electricity ({preview.unitsConsumed} units × ₹{electricityRate}/unit)
+                            {t('checkout_electricity')} ({preview.unitsConsumed} {t('checkout_units_consumed')} × ₹{electricityRate}/unit)
                           </span>
                           <span className="font-medium">{formatCurrency(preview.electricityCharge)}</span>
                         </div>
@@ -1097,7 +1114,7 @@ export default function PgGuests() {
 
                       <Separator className="my-1" />
                       <div className="flex justify-between font-semibold text-amber-800 dark:text-amber-200">
-                        <span>Total due (including unbilled + electricity)</span>
+                        <span>{t('checkout_total_dues')}</span>
                         <span>{formatCurrency(preview.totalDues)}</span>
                       </div>
 
@@ -1108,10 +1125,10 @@ export default function PgGuests() {
                             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                             <div className="text-xs">
                               <p className="font-semibold text-amber-800 dark:text-amber-300">
-                                Deposit already {preview.depositStatus === 'Refunded' ? 'refunded' : preview.depositStatus === 'Partially-Refunded' ? 'partially refunded' : 'adjusted'}
+                                {t('checkout_deposit_info')}: {preview.depositStatus}
                               </p>
                               <p className="text-amber-700 dark:text-amber-400 mt-0.5">
-                                Security deposit ({formatCurrency(preview.depositAmount)}) was already processed before checkout. Guest owes full dues.
+                                {t('checkout_deposit')} ({formatCurrency(preview.depositAmount)}) was already processed. Guest owes full dues.
                               </p>
                             </div>
                           </div>
@@ -1119,11 +1136,11 @@ export default function PgGuests() {
                       ) : (
                         <>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Security deposit (Held)</span>
+                            <span className="text-muted-foreground">{t('checkout_deposit')} (Held)</span>
                             <span className="font-medium">{formatCurrency(preview.depositAmount)}</span>
                           </div>
                           <div className="flex justify-between font-semibold">
-                            <span>Deposit adjustment</span>
+                            <span>{t('checkout_deposit')} adjustment</span>
                             <span className={preview.depositAdjustment >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
                               {preview.depositAdjustment >= 0
                                 ? `Refund ${formatCurrency(preview.depositAdjustment)}`
@@ -1141,7 +1158,7 @@ export default function PgGuests() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setCheckoutOpen(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleCheckout}
@@ -1151,12 +1168,12 @@ export default function PgGuests() {
               {checkoutSubmitting ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
+                  {t('checkout_processing')}
                 </>
               ) : (
                 <>
                   <LogOut className="mr-2 h-4 w-4" />
-                  Confirm Check-out
+                  {t('checkout_confirm')}
                 </>
               )}
             </Button>
@@ -1169,23 +1186,23 @@ export default function PgGuests() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-emerald-800 dark:text-emerald-300">
-              Checkout Summary
+              {t('checkout_stay_summary')}
             </DialogTitle>
             <DialogDescription>
-              Guest has been checked out successfully
+              {t('checkout_success')}
             </DialogDescription>
           </DialogHeader>
 
           {checkoutResult && (
             <div className="space-y-3 py-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-muted-foreground">Guest</div>
+                <div className="text-muted-foreground">{t('guests_name')}</div>
                 <div className="font-medium">{checkoutResult.guestName}</div>
-                <div className="text-muted-foreground">Room</div>
+                <div className="text-muted-foreground">{t('checkin_room')}</div>
                 <div className="font-medium">{checkoutResult.roomNo}</div>
-                <div className="text-muted-foreground">Check-in</div>
+                <div className="text-muted-foreground">{t('guest_check_in')}</div>
                 <div className="font-medium">{formatDate(checkoutResult.checkInDate)}</div>
-                <div className="text-muted-foreground">Check-out</div>
+                <div className="text-muted-foreground">{t('guest_check_out')}</div>
                 <div className="font-medium">{formatDate(checkoutResult.checkOutDate)}</div>
               </div>
 
@@ -1194,35 +1211,35 @@ export default function PgGuests() {
               {/* Accounting Summary */}
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Billable months ({checkoutResult.totalMonths} × {formatCurrency(checkoutResult.monthlyRent)})</span>
+                  <span className="text-muted-foreground">{t('checkout_total_months')} ({checkoutResult.totalMonths} × {formatCurrency(checkoutResult.monthlyRent)})</span>
                   <span className="font-medium">{checkoutResult.totalMonths} month{checkoutResult.totalMonths > 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-amber-900 dark:text-amber-100">
-                  <span>Total Accrued Rent</span>
+                  <span>{t('checkout_total_rent')}</span>
                   <span>{formatCurrency(checkoutResult.totalRent)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Already billed</span>
+                  <span className="text-muted-foreground">{t('checkout_billed')}</span>
                   <span className="font-medium">{formatCurrency(checkoutResult.totalBilled)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Paid</span>
+                  <span className="text-muted-foreground">{t('checkout_paid')}</span>
                   <span className="font-medium text-emerald-700 dark:text-emerald-400">{formatCurrency(checkoutResult.totalPaid)}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-red-700 dark:text-red-300">
-                  <span>Remaining Balance</span>
+                  <span>{t('checkout_remaining_rent')}</span>
                   <span>{formatCurrency(checkoutResult.totalBalance)}</span>
                 </div>
                 {checkoutResult.remainingRent > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Unbilled rent (checkout bill)</span>
+                    <span className="text-muted-foreground">{t('checkout_remaining_rent')}</span>
                     <span className="font-medium">{formatCurrency(checkoutResult.remainingRent)}</span>
                   </div>
                 )}
                 {checkoutResult.electricityCharge !== undefined && checkoutResult.electricityCharge > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Electricity ({checkoutResult.unitsConsumed} units)
+                      {t('checkout_electricity')} ({checkoutResult.unitsConsumed} {t('checkout_units_consumed')})
                     </span>
                     <div className="font-medium">{formatCurrency(checkoutResult.electricityCharge)}</div>
                   </div>
@@ -1236,7 +1253,7 @@ export default function PgGuests() {
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
-                      Unpaid Bills ({checkoutResult.unpaidBills.length})
+                      {t('checkout_unpaid_bills')} ({checkoutResult.unpaidBills.length})
                     </p>
                     <div className="space-y-1 max-h-24 overflow-y-auto">
                       {checkoutResult.unpaidBills.map((bill) => (
@@ -1258,25 +1275,25 @@ export default function PgGuests() {
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total dues</span>
+                  <span className="text-muted-foreground">{t('checkout_total_dues')}</span>
                   <span className="font-semibold">{formatCurrency(checkoutResult.totalDues)}</span>
                 </div>
                 {checkoutResult.depositAlreadyProcessed ? (
                   <div className="flex items-start gap-1.5 rounded bg-amber-50 dark:bg-amber-950/20 p-2 text-xs">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
                     <span className="text-amber-700 dark:text-amber-400">
-                      Deposit was already <strong>{checkoutResult.depositStatus}</strong> before checkout. Full dues are payable.
+                      {t('checkout_deposit')} was already <strong>{checkoutResult.depositStatus}</strong> before checkout. Full dues are payable.
                     </span>
                   </div>
                 ) : (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Deposit deducted</span>
+                      <span className="text-muted-foreground">{t('checkout_deposit')} deducted</span>
                       <span className="font-medium">{formatCurrency(checkoutResult.depositDeducted)}</span>
                     </div>
                     {checkoutResult.depositRefund > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Deposit refunded</span>
+                        <span className="text-muted-foreground">{t('checkout_net_refund')}</span>
                         <span className="font-medium text-emerald-700 dark:text-emerald-400">
                           {formatCurrency(checkoutResult.depositRefund)}
                         </span>
@@ -1315,10 +1332,10 @@ export default function PgGuests() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-emerald-800 dark:text-emerald-300">
-              Guest Details
+              {t('guest_details_title')}
             </DialogTitle>
             <DialogDescription>
-              Complete guest information & live billing status
+              {t('guest_personal_info')} & {t('guest_live_billing_status')}
             </DialogDescription>
           </DialogHeader>
 
@@ -1363,7 +1380,7 @@ export default function PgGuests() {
                   <CardHeader className="pb-2 pt-4 px-4">
                     <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
                       <FileText className="h-4 w-4" />
-                      Guest Profile Information
+                      {t('guest_personal_info')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-3 sm:px-4 pb-4 space-y-2 text-sm">
@@ -1371,21 +1388,21 @@ export default function PgGuests() {
                       {/* Guest Name */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" />
-                        Guest Name
+                        {t('guests_name')}
                       </span>
-                      <span className="font-semibold">{detailsGuest.name}</span>
+                      <span className="font-semibold">{getGuestName(detailsGuest.name, detailsGuest.nameHindi)}</span>
 
                       {/* Contact */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Phone className="h-3.5 w-3.5" />
-                        Contact
+                        {t('guest_contact')}
                       </span>
                       <span className="font-medium">{detailsGuest.phone || '—'}</span>
 
                       {/* Identity */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Shield className="h-3.5 w-3.5" />
-                        Identity
+                        {t('guest_aadhaar')}
                       </span>
                       <span className="font-medium">
                         <span className="font-mono">{detailsGuest.aadhaarNo || '—'}</span>
@@ -1406,13 +1423,13 @@ export default function PgGuests() {
                       {/* Job/Work */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Briefcase className="h-3.5 w-3.5" />
-                        Job/Work
+                        {t('guest_occupation')}
                       </span>
                       <span className="font-medium">
                         {detailsGuest.occupation || '—'}
                         {detailsGuest.workLocation && (
                           <span className="text-muted-foreground">
-                            {' '}at{' '}
+                            {' '}{t('at')}{' '}
                             <span className="inline-flex items-center gap-0.5">
                               <MapPin className="h-3 w-3" />
                               {detailsGuest.workLocation}
@@ -1424,32 +1441,32 @@ export default function PgGuests() {
                       {/* Family/Members */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" />
-                        Family/Members
+                        {t('guest_members')}
                       </span>
                       <span className="font-medium">
-                        {detailsGuest.totalMembers} member{detailsGuest.totalMembers !== 1 ? 's' : ''}
+                        {detailsGuest.totalMembers} {detailsGuest.totalMembers !== 1 ? t('guest_members') : t('guest_member')}
                       </span>
 
                       {/* Emergency Contact */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        Emergency
+                        {t('guest_emergency_contact')}
                       </span>
                       <span className="font-medium">{detailsGuest.emergencyContact || '—'}</span>
 
                       {/* Room */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Home className="h-3.5 w-3.5" />
-                        Room
+                        {t('checkin_room')}
                       </span>
                       <span className="font-medium">
-                        {detailsGuest.room.roomNo} ({detailsGuest.room.type}) &middot; Rent: {formatCurrency(monthlyRent)}
+                        {detailsGuest.room.roomNo} ({detailsGuest.room.type}) &middot; {t('checkin_monthly_rent')}: {formatCurrency(monthlyRent)}
                       </span>
 
                       {/* Deposit */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Shield className="h-3.5 w-3.5" />
-                        Deposit
+                        {t('checkout_deposit')}
                       </span>
                       <span className="font-medium">
                         {formatCurrency(detailsGuest.securityDeposit?.amount ?? 0)}
@@ -1463,24 +1480,24 @@ export default function PgGuests() {
                       {/* Status */}
                       <span className="text-muted-foreground flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5" />
-                        Status
+                        {t('guests_status')}
                       </span>
                       <span>
                         {detailsGuest.status === 'Live' ? (
                           <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
-                            Live
+                            {t('guests_live')}
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-gray-600 dark:text-gray-400">
-                            Checked-out
+                            {t('guests_checkedout')}
                           </Badge>
                         )}
                       </span>
 
                       {/* Check-in / Check-out */}
-                      <span className="text-muted-foreground">Check-in</span>
+                      <span className="text-muted-foreground">{t('guest_check_in')}</span>
                       <span className="font-medium">{formatDate(detailsGuest.checkInDate)}</span>
-                      <span className="text-muted-foreground">Check-out</span>
+                      <span className="text-muted-foreground">{t('guest_check_out')}</span>
                       <span className="font-medium">{formatDate(detailsGuest.checkOutDate)}</span>
                     </div>
                   </CardContent>
@@ -1492,24 +1509,24 @@ export default function PgGuests() {
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-semibold text-red-700 dark:text-red-400 flex items-center gap-1.5">
                         <CreditCard className="h-4 w-4" />
-                        Live Billing Status
+                        {t('guest_live_billing_status')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4 space-y-2 text-sm">
                       <div className="grid grid-cols-[150px_1fr] gap-y-2.5">
                         {/* Check-in Date */}
-                        <span className="text-muted-foreground">Check-in Date</span>
+                        <span className="text-muted-foreground">{t('guest_check_in')}</span>
                         <span className="font-medium">{formatDate(detailsGuest.checkInDate)}</span>
 
                         {/* Total Stay */}
-                        <span className="text-muted-foreground">Total Stay</span>
+                        <span className="text-muted-foreground">{t('guest_total_stay')}</span>
                         <span className="font-semibold text-amber-800 dark:text-amber-300">
                           {stayMonths} Month{stayMonths !== 1 ? 's' : ''}{stayRemainingDays > 0 ? ` ${stayRemainingDays} Day${stayRemainingDays !== 1 ? 's' : ''}` : ''}
                           <span className="text-xs text-muted-foreground font-normal ml-1">(live)</span>
                         </span>
 
                         {/* Monthly Rent */}
-                        <span className="text-muted-foreground">Monthly Rent</span>
+                        <span className="text-muted-foreground">{t('checkin_monthly_rent')}</span>
                         <span className="font-medium">{formatCurrency(monthlyRent)}</span>
                       </div>
 
@@ -1517,7 +1534,7 @@ export default function PgGuests() {
 
                       {/* Current Month Bill */}
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Current Month Bill</span>
+                        <span className="text-muted-foreground">{t('guest_current_bill')}</span>
                         <span className="font-medium text-amber-800 dark:text-amber-300">
                           {formatCurrency(currentMonthBill)}
                         </span>
@@ -1525,7 +1542,7 @@ export default function PgGuests() {
 
                       {/* Previous Due */}
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Previous Due</span>
+                        <span className="text-muted-foreground">{t('guest_previous_due')}</span>
                         <span className={`font-medium ${previousDue > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                           {formatCurrency(previousDue)}
                         </span>
@@ -1535,7 +1552,7 @@ export default function PgGuests() {
 
                       {/* Total Outstanding */}
                       <div className="flex justify-between items-center py-1">
-                        <span className="font-bold text-red-800 dark:text-red-300">Total Outstanding</span>
+                        <span className="font-bold text-red-800 dark:text-red-300">{t('guest_total_outstanding')}</span>
                         <span className="font-bold text-red-800 dark:text-red-300 text-base">
                           {formatCurrency(totalBalance)}
                         </span>
@@ -1546,14 +1563,14 @@ export default function PgGuests() {
                         <div className="mt-1 flex items-start gap-1.5 text-xs text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-950/40 p-2 rounded">
                           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                           <span>
-                            Outstanding = Current Month ({formatCurrency(currentMonthBill)}) + Previous Due ({formatCurrency(previousDue)})
+                            {t('guest_total_outstanding')} = {t('guest_current_bill')} ({formatCurrency(currentMonthBill)}) + {t('guest_previous_due')} ({formatCurrency(previousDue)})
                           </span>
                         </div>
                       )}
                       {totalBalance === 0 && (
                         <div className="mt-1 flex items-start gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 p-2 rounded">
                           <Shield className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>All dues cleared — no outstanding balance.</span>
+                          <span>{t('guest_all_dues_cleared')}</span>
                         </div>
                       )}
                     </CardContent>
@@ -1565,7 +1582,7 @@ export default function PgGuests() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
-              Close
+              {t('close')}
             </Button>
           </DialogFooter>
         </DialogContent>

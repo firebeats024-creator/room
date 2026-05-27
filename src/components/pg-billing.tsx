@@ -29,6 +29,7 @@ import {
   daysBetween,
   getDateComponents,
 } from '@/lib/billing-utils';
+import { useLanguage } from '@/lib/i18n';
 
 // ---------- Types ----------
 
@@ -59,6 +60,7 @@ interface Bill {
   guest: {
     id: string;
     name: string;
+    nameHindi: string;
     phone: string;
     status: string;
     billingCycleDate: number;
@@ -125,6 +127,7 @@ function getOrdinalSuffix(n: number): string {
 interface GuestBucketInfo {
   guestId: string;
   guestName: string;
+  guestNameHindi: string;
   roomNo: string;
   guestStatus: string;
   billingCycleDate: number;
@@ -157,6 +160,7 @@ interface GuestBucketInfo {
 // ---------- Component ----------
 
 export default function PgBilling() {
+  const { t, getGuestName } = useLanguage();
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [receiptDownloading, setReceiptDownloading] = useState<string | null>(null);
@@ -246,6 +250,7 @@ export default function PgBilling() {
       acc[key] = {
         guestId: bill.guestId,
         guestName: bill.guest.name,
+        guestNameHindi: bill.guest.nameHindi || '',
         roomNo: bill.room.roomNo,
         guestStatus: bill.guest.status,
         billingCycleDate: bill.guest.billingCycleDate,
@@ -600,14 +605,14 @@ export default function PgBilling() {
       return (
         <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100">
           <CheckCircle2 className="h-3 w-3 mr-1" />
-          Paid
+          {t('billing_paid_status')}
         </Badge>
       );
     }
     return (
       <Badge className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-100">
         <AlertCircle className="h-3 w-3 mr-1" />
-        {status === 'Partially-Paid' ? 'Partial' : 'Overdue'}
+        {status === 'Partially-Paid' ? t('billing_partial') : t('billing_overdue')}
       </Badge>
     );
   };
@@ -623,10 +628,10 @@ export default function PgBilling() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
-            Billing Management
+            {t('billing_management')}
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Dynamic Rental Billing — Stay Duration based &nbsp;|&nbsp; Live: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span>
+            {t('billing_dynamic')} &nbsp;|&nbsp; {t('billing_live')}: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -638,7 +643,7 @@ export default function PgBilling() {
             className="gap-1.5"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('billing_refresh')}
           </Button>
         </div>
       </div>
@@ -664,7 +669,7 @@ export default function PgBilling() {
                     <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Total Billed</p>
+                    <p className="text-xs text-muted-foreground">{t('billing_total_billed')}</p>
                     <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
                       {formatCurrency(totalBilled)}
                     </p>
@@ -679,7 +684,7 @@ export default function PgBilling() {
                     <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Total Paid</p>
+                    <p className="text-xs text-muted-foreground">{t('billing_total_paid')}</p>
                     <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
                       {formatCurrency(totalPaid)}
                     </p>
@@ -694,12 +699,12 @@ export default function PgBilling() {
                     <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Current Bill</p>
+                    <p className="text-xs text-muted-foreground">{t('billing_current_bill')}</p>
                     <p className="text-lg font-bold text-red-800 dark:text-red-200">
                       {formatCurrency(aggregateCurrentBill)}
                     </p>
                     <p className="text-[10px] text-red-600/70 dark:text-red-400/70 mt-0.5">
-                      latest cycle rent
+                      {t('billing_latest_cycle')}
                     </p>
                   </div>
                 </div>
@@ -712,12 +717,12 @@ export default function PgBilling() {
                     <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Previous Due</p>
+                    <p className="text-xs text-muted-foreground">{t('billing_previous_due')}</p>
                     <p className="text-lg font-bold text-amber-800 dark:text-amber-200">
                       {formatCurrency(aggregatePreviousDue)}
                     </p>
                     <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">
-                      older cycles
+                      {t('billing_older_cycles')}
                     </p>
                   </div>
                 </div>
@@ -730,12 +735,12 @@ export default function PgBilling() {
                     <DollarSign className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Total Balance</p>
+                    <p className="text-xs text-muted-foreground">{t('billing_total_balance')}</p>
                     <p className="text-xl font-extrabold text-red-700 dark:text-red-300">
                       {formatCurrency(aggregateTotalBalance)}
                     </p>
                     <p className="text-[10px] text-orange-600/70 dark:text-orange-400/70 mt-0.5">
-                      {dueCount} bill{dueCount !== 1 ? 's' : ''} across {guestSummaryList.filter(g => g.totalBalance > 0).length} guest{guestSummaryList.filter(g => g.totalBalance > 0).length !== 1 ? 's' : ''}
+                      {dueCount} {t('billing_bills')}{dueCount !== 1 ? 's' : ''} {t('billing_across')} {guestSummaryList.filter(g => g.totalBalance > 0).length} {t(guestSummaryList.filter(g => g.totalBalance > 0).length !== 1 ? 'billing_guests' : 'billing_guest')}
                     </p>
                   </div>
                 </div>
@@ -761,7 +766,7 @@ export default function PgBilling() {
           <>
             {/* Guest Filter Tabs */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Guests:</span>
+              <span className="text-xs font-medium text-muted-foreground">{t('billing_guests_label')}:</span>
               <div className="flex items-center gap-1">
                 <Button
                   variant={guestFilter === 'all' ? 'default' : 'outline'}
@@ -769,7 +774,7 @@ export default function PgBilling() {
                   className={`h-7 text-xs px-3 ${guestFilter === 'all' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-emerald-300 text-emerald-700'}`}
                   onClick={() => setGuestFilter('all')}
                 >
-                  All ({totalCount})
+                  {t('billing_all')} ({totalCount})
                 </Button>
                 <Button
                   variant={guestFilter === 'live' ? 'default' : 'outline'}
@@ -778,7 +783,7 @@ export default function PgBilling() {
                   onClick={() => setGuestFilter('live')}
                 >
                   <Users className="h-3 w-3 mr-1" />
-                  Live ({liveCount})
+                  {t('billing_guests')} ({liveCount})
                 </Button>
                 <Button
                   variant={guestFilter === 'old' ? 'default' : 'outline'}
@@ -787,7 +792,7 @@ export default function PgBilling() {
                   onClick={() => setGuestFilter('old')}
                 >
                   <Clock className="h-3 w-3 mr-1" />
-                  Old ({oldCount})
+                  {t('billing_old')} ({oldCount})
                 </Button>
               </div>
             </div>
@@ -798,8 +803,8 @@ export default function PgBilling() {
                   <div className="mb-3 flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
                     <Users className="size-7 text-emerald-400" />
                   </div>
-                  <p className="text-sm font-medium text-muted-foreground">No guests yet</p>
-                  <p className="text-xs text-muted-foreground/70 mt-1">Add rooms and check in guests to see billing data here</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t('billing_no_guests')}</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">{t('billing_add_rooms')}</p>
                 </CardContent>
               </Card>
             ) : (
@@ -807,7 +812,7 @@ export default function PgBilling() {
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-semibold text-red-800 dark:text-red-300 flex items-center gap-1.5">
               <Calculator className="h-4 w-4" />
-              Rent Accrual Summary (Dynamic — as of {liveDateStr})
+              {t('billing_rent_accrual')} {liveDateStr})
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
@@ -815,17 +820,17 @@ export default function PgBilling() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-red-50/60 dark:bg-red-950/30 hover:bg-red-50/60 dark:hover:bg-red-950/30">
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200">Room</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200">Guest</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200">Check-in</TableHead>
-                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200">Check-out</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">Days</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-center">Calculation</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">Accrued Rent</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">Paid</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right bg-red-50/80 dark:bg-red-950/40">Current Bill</TableHead>
-                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200 text-right bg-amber-50/60 dark:bg-amber-950/30">Previous Due</TableHead>
-                    <TableHead className="font-semibold text-orange-800 dark:text-orange-200 text-right bg-orange-50/60 dark:bg-orange-950/30">Total Balance</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200">{t('billing_room')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200">{t('billing_guest_col')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200">{t('billing_check_in')}</TableHead>
+                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200">{t('billing_check_out')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_days')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-center">{t('billing_calculation')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_accrued_rent')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_paid')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right bg-red-50/80 dark:bg-red-950/40">{t('billing_current_bill_col')}</TableHead>
+                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200 text-right bg-amber-50/60 dark:bg-amber-950/30">{t('billing_previous_due_col')}</TableHead>
+                    <TableHead className="font-semibold text-orange-800 dark:text-orange-200 text-right bg-orange-50/60 dark:bg-orange-950/30">{t('billing_total_balance_col')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -838,11 +843,11 @@ export default function PgBilling() {
                       </TableCell>
                       <TableCell className="font-medium text-sm">
                         <div className="flex items-center gap-1.5">
-                          {gs.guestName}
+                          {getGuestName(gs.guestName, gs.guestNameHindi)}
                           {gs.guestStatus === 'Checked-out' ? (
-                            <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800">OUT</Badge>
+                            <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800">{t('guest_checked_out').toUpperCase()}</Badge>
                           ) : (
-                            <Badge className="text-[9px] px-1 py-0 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">LIVE</Badge>
+                            <Badge className="text-[9px] px-1 py-0 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">{t('billing_guests').toUpperCase()}</Badge>
                           )}
                         </div>
                       </TableCell>
@@ -863,13 +868,13 @@ export default function PgBilling() {
                       <TableCell className="text-right">
                         <div className="inline-flex flex-col items-end">
                           <span className="font-semibold text-foreground">{gs.daysStayed}</span>
-                          <span className="text-[9px] text-muted-foreground">days</span>
+                          <span className="text-[9px] text-muted-foreground">{t('billing_days_label')}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="inline-flex flex-col items-center">
                           <Badge className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">
-                            {gs.stayMonths} Month{gs.stayMonths !== 1 ? 's' : ''} × {formatCurrency(gs.monthlyRent)}
+                            {gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''} × {formatCurrency(gs.monthlyRent)}
                           </Badge>
                           <span className="text-[9px] text-muted-foreground mt-0.5">= {formatCurrency(gs.totalAccruedRent)}</span>
                         </div>
@@ -901,26 +906,26 @@ export default function PgBilling() {
                 <div key={gs.guestId} className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-3">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">{gs.guestName}</span>
+                      <span className="font-semibold text-sm">{getGuestName(gs.guestName, gs.guestNameHindi)}</span>
                       <Badge variant="outline" className="font-mono text-[10px] border-emerald-300 dark:border-emerald-700">
                         {gs.roomNo}
                       </Badge>
                       {gs.guestStatus === 'Checked-out' ? (
-                        <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800">CHECKED OUT</Badge>
+                        <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800">{t('guest_checked_out').toUpperCase()}</Badge>
                       ) : (
-                        <Badge className="text-[9px] px-1 py-0 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">LIVE</Badge>
+                        <Badge className="text-[9px] px-1 py-0 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">{t('billing_guests').toUpperCase()}</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs">
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Timer className="h-3 w-3" />
-                        {gs.daysStayed} days ({gs.stayMonths} month{gs.stayMonths !== 1 ? 's' : ''})
+                        {gs.daysStayed} {t('billing_days_label')} ({gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''})
                       </span>
                       <span className="text-muted-foreground">
-                        Accrued: <span className="font-semibold text-foreground">{formatCurrency(gs.totalAccruedRent)}</span>
+                        {t('billing_accrued_rent')}: <span className="font-semibold text-foreground">{formatCurrency(gs.totalAccruedRent)}</span>
                       </span>
                       <span className="text-emerald-700 dark:text-emerald-400">
-                        Paid: <span className="font-semibold">{formatCurrency(gs.totalPaid)}</span>
+                        {t('billing_paid')}: <span className="font-semibold">{formatCurrency(gs.totalPaid)}</span>
                       </span>
                     </div>
                   </div>
@@ -928,29 +933,29 @@ export default function PgBilling() {
                   <div className="flex items-center gap-2 rounded bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 px-2 py-1 mb-2 text-xs">
                     <Calculator className="h-3 w-3 text-emerald-500" />
                     <span className="text-emerald-800 dark:text-emerald-300 font-medium">
-                      {gs.stayMonths} months × {formatCurrency(gs.monthlyRent)} = {formatCurrency(gs.totalAccruedRent)}
+                      {gs.stayMonths} {t('billing_months')} × {formatCurrency(gs.monthlyRent)} = {formatCurrency(gs.totalAccruedRent)}
                     </span>
                     <span className="text-muted-foreground ml-2">|</span>
-                    <span className="text-muted-foreground ml-2">Check-in: <span className="font-semibold text-foreground">{formatDate(gs.checkInDate)}</span></span>
-                    <span className="text-muted-foreground ml-2">| Cycle: <span className="font-semibold text-foreground">{gs.billingCycleDate}{getOrdinalSuffix(gs.billingCycleDate)}</span></span>
+                    <span className="text-muted-foreground ml-2">{t('billing_check_in')}: <span className="font-semibold text-foreground">{formatDate(gs.checkInDate)}</span></span>
+                    <span className="text-muted-foreground ml-2">| {t('billing_calculation')}: <span className="font-semibold text-foreground">{gs.billingCycleDate}{getOrdinalSuffix(gs.billingCycleDate)}</span></span>
                     <span className="text-muted-foreground ml-2">| {gs.guestStatus === 'Checked-out' ? (
-                      <>Out: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(gs.checkOutDate)}</span></>
+                      <>{t('guest_checked_out')}: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(gs.checkOutDate)}</span></>
                     ) : (
-                      <>Live: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
+                      <>{t('billing_live')}: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
                     )}</span>
                   </div>
                   {/* Current Bill / Previous Due / Total Balance bucket bar */}
                   <div className="grid grid-cols-3 gap-2 mb-2">
                     <div className="rounded-md bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-2 py-1.5 text-center">
-                      <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">Current Bill</p>
+                      <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">{t('billing_current_bill')}</p>
                       <p className="text-sm font-bold text-red-800 dark:text-red-200">{formatCurrency(gs.currentBillAmount)}</p>
                     </div>
                     <div className="rounded-md bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5 text-center">
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Previous Due</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{t('billing_previous_due')}</p>
                       <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{formatCurrency(gs.previousDue)}</p>
                     </div>
                     <div className="rounded-md bg-orange-100 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-800 px-2 py-1.5 text-center">
-                      <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">Total Balance</p>
+                      <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">{t('billing_total_balance')}</p>
                       <p className="text-sm font-extrabold text-orange-800 dark:text-orange-200">{formatCurrency(gs.totalBalance)}</p>
                     </div>
                   </div>
@@ -974,14 +979,14 @@ export default function PgBilling() {
                                   ? 'bg-amber-100 text-amber-700 border-amber-200'
                                   : 'bg-red-100 text-red-700 border-red-200'
                             }`}>
-                              {db.isCurrentBill ? 'CURRENT' : db.paidAmount > 0 ? 'PARTIAL' : 'DUE'}
+                              {db.isCurrentBill ? 'CURRENT' : db.paidAmount > 0 ? t('billing_partial').toUpperCase() : t('billing_overdue').toUpperCase()}
                             </Badge>
                             <span className="text-muted-foreground">
                               {formatBillPeriodWithCycleDate(db.month, db.year, db.cycleDate)}
                             </span>
                             {db.paidAmount > 0 && (
                               <span className="text-emerald-600 dark:text-emerald-400">
-                                ({formatCurrency(db.paidAmount)} paid)
+                                ({formatCurrency(db.paidAmount)} {t('billing_paid').toLowerCase()})
                               </span>
                             )}
                           </div>
@@ -1006,13 +1011,13 @@ export default function PgBilling() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-emerald-50 dark:bg-emerald-950/40">
           <TabsTrigger value="all" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            All ({bills.length})
+            {t('billing_all_bills')} ({bills.length})
           </TabsTrigger>
           <TabsTrigger value="overdue" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
-            Due ({dueCount})
+            {t('billing_overdue_tab')} ({dueCount})
           </TabsTrigger>
           <TabsTrigger value="paid" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            Paid ({paidCount})
+            {t('billing_paid_tab')} ({paidCount})
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -1035,9 +1040,9 @@ export default function PgBilling() {
           ) : filteredBills.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Receipt className="h-12 w-12 mb-3 opacity-40" />
-              <p className="text-lg font-medium">No bills found</p>
+              <p className="text-lg font-medium">{t('billing_no_guests')}</p>
               <p className="text-sm">
-                {activeTab === 'all' ? 'Bills will appear when guests are checked in' : `No ${activeTab} bills`}
+                {activeTab === 'all' ? t('billing_add_rooms') : `${t('billing_no_guests')}`}
               </p>
             </div>
           ) : (
@@ -1045,23 +1050,23 @@ export default function PgBilling() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30">
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Guest</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Room</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Bill Period</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('billing_guest_col')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('billing_room')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t("billing_current_bill_col")}</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Rent</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Opening</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Ending</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Units</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Rate</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Electricity</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t("guest_electricity")}</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Bill Total</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Calculation</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">Adj. Current</TableHead>
-                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200 text-right bg-amber-50/60 dark:bg-amber-950/30">Adj. Prev Due</TableHead>
-                    <TableHead className="font-semibold text-orange-800 dark:text-orange-200 text-right bg-orange-50/60 dark:bg-orange-950/30">Total Balance</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">{t('billing_calculation')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t("billing_current_bill")}</TableHead>
+                    <TableHead className="font-semibold text-amber-800 dark:text-amber-200 text-right bg-amber-50/60 dark:bg-amber-950/30">{t("billing_previous_due")}</TableHead>
+                    <TableHead className="font-semibold text-orange-800 dark:text-orange-200 text-right bg-orange-50/60 dark:bg-orange-950/30">{t('billing_total_balance_col')}</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Due Date</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Status</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Actions</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t("billing_overdue_tab")}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('billing_edit_bill')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1083,9 +1088,9 @@ export default function PgBilling() {
                       }`}>
                         <TableCell className="font-medium">
                           <div>
-                            {bill.guest.name}
+                            {getGuestName(bill.guest.name, bill.guest.nameHindi)}
                             {bill.guest.status === 'Checked-out' && (
-                              <span className="ml-1 text-[10px] text-muted-foreground">(out)</span>
+                              <span className="ml-1 text-[10px] text-muted-foreground">({t("guest_checked_out")})</span>
                             )}
                           </div>
                         </TableCell>
@@ -1101,7 +1106,7 @@ export default function PgBilling() {
                             </span>
                             <span className="text-muted-foreground text-[10px] block mt-0.5">
                               <Calendar className="h-2.5 w-2.5 inline mr-0.5" />
-                              Cycle: {bill.guest.billingCycleDate}{getOrdinalSuffix(bill.guest.billingCycleDate)}
+                              {t("billing_calculation")}: {bill.guest.billingCycleDate}{getOrdinalSuffix(bill.guest.billingCycleDate)}
                             </span>
                           </div>
                         </TableCell>
@@ -1131,7 +1136,7 @@ export default function PgBilling() {
                               <span className="text-foreground">{formatCurrency(bill.totalAmount)}</span>
                               {hasPartialPayment && (
                                 <span className="block text-[11px] text-emerald-600 dark:text-emerald-400">
-                                  Paid: {formatCurrency(bill.paidAmount || 0)}
+                                  {t('billing_paid')}: {formatCurrency(bill.paidAmount || 0)}
                                 </span>
                               )}
                             </div>
@@ -1155,7 +1160,7 @@ export default function PgBilling() {
                                 {formatCurrency(currentBillAmt)}
                               </span>
                               <Badge className="text-[8px] px-1 py-0 mt-0.5 bg-red-100 text-red-700 border-red-200 block w-fit ml-auto">
-                                CURRENT
+                                {t('billing_current_bill')}
                               </Badge>
                             </div>
                           ) : (
@@ -1170,7 +1175,7 @@ export default function PgBilling() {
                             previousDueVal > 0 ? (
                               <div className="inline-flex flex-col items-end">
                                 <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(previousDueVal)}</span>
-                                <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70">older cycles</span>
+                                <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70">{t('billing_older_cycles')}</span>
                               </div>
                             ) : (
                               <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">₹0</span>
@@ -1191,7 +1196,7 @@ export default function PgBilling() {
                                 {formatCurrency(totalBalance)}
                               </span>
                               <span className="text-[9px] text-orange-600/70 dark:text-orange-400/70 mt-0.5">
-                                total balance
+                                {t('billing_total_balance')}
                               </span>
                             </div>
                           ) : (
@@ -1205,18 +1210,18 @@ export default function PgBilling() {
                             <Button variant="ghost" size="sm" onClick={() => handleDownloadReceipt(bill.id)}
                               disabled={receiptDownloading === bill.id}
                               className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
-                              title="Download Receipt">
+                              title={t('billing_download_receipt')}>
                               <FileDown className={`h-3.5 w-3.5 ${receiptDownloading === bill.id ? 'animate-bounce' : ''}`} />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => openEditDialog(bill)}
                               className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
-                              title="Edit Bill">
+                              title={t('billing_edit_bill')}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                             {!isPaid && (
                               <Button variant="ghost" size="sm" onClick={() => openConfirmPaid(bill)}
                                 className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
-                                title="Mark Paid">
+                                title={t('billing_mark_paid')}>
                                 <DollarSign className="h-3.5 w-3.5" />
                               </Button>
                             )}
@@ -1238,10 +1243,10 @@ export default function PgBilling() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
               <ShieldCheck className="h-5 w-5" />
-              Confirm Payment
+              {t('billing_mark_paid')}
             </DialogTitle>
             <DialogDescription>
-              Review bill details, update amounts, and confirm payment
+              {t('billing_add_rooms')}
             </DialogDescription>
           </DialogHeader>
 
@@ -1252,11 +1257,11 @@ export default function PgBilling() {
                 <CardContent className="p-4 space-y-2">
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Guest</span>
-                      <p className="font-medium">{confirmPaidBill.guest.name}</p>
+                      <span className="text-muted-foreground">{t('billing_guest_col')}</span>
+                      <p className="font-medium">{getGuestName(confirmPaidBill.guest.name, confirmPaidBill.guest.nameHindi)}</p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Room</span>
+                      <span className="text-muted-foreground">{t('billing_room')}</span>
                       <p className="font-medium">{confirmPaidBill.room.roomNo}</p>
                     </div>
                     <div>
@@ -1266,23 +1271,22 @@ export default function PgBilling() {
                       </p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Status</span>
+                      <span className="text-muted-foreground">{t('billing_overdue_tab')}</span>
                       <p><StatusBadge status={confirmPaidBill.status} /></p>
                     </div>
                   </div>
                   <Separator />
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Rent Amount</span>
+                      <span className="text-muted-foreground">{t('guest_rent')}</span>
                       <p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(confirmPaidBill.rentAmount)}</p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Electricity</span>
-                      <p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(confirmPaidBill.electricityCharge)}</p>
+                      <span className="text-muted-foreground">{t('guest_electricity')}</span>
                     </div>
                     {(confirmPaidBill.paidAmount || 0) > 0 && (
                       <div>
-                        <span className="text-muted-foreground">Already Paid</span>
+                        <span className="text-muted-foreground">{t('billing_paid')}</span>
                         <p className="font-semibold text-teal-600 dark:text-teal-400">{formatCurrency(confirmPaidBill.paidAmount || 0)}</p>
                       </div>
                     )}
@@ -1295,31 +1299,31 @@ export default function PgBilling() {
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                     <Zap className="h-4 w-4" />
-                    Electricity Details
+                    {t('guest_electricity')} Details
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4 space-y-3">
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Opening Unit</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('guest_opening_unit')}</Label>
                       <Input type="number" value={payOpeningUnit} onChange={(e) => setPayOpeningUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Ending Unit</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('guest_current_unit')}</Label>
                       <Input type="number" value={payEndingUnit} onChange={(e) => setPayEndingUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Rate / Unit (₹)</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('guest_rate_per_unit')}</Label>
                       <Input type="number" value={payRatePerUnit} onChange={(e) => setPayRatePerUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="10" />
                     </div>
                   </div>
                   <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 border border-amber-100 dark:border-amber-900">
                     <div className="flex items-center gap-2 text-xs">
                       <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      <span className="text-muted-foreground">Units: <span className="font-semibold text-foreground">{payUnitsConsumed}</span></span>
+                      <span className="text-muted-foreground">{t('guest_units')}: <span className="font-semibold text-foreground">{payUnitsConsumed}</span></span>
                     </div>
                     <div className="text-xs">
-                      <span className="text-muted-foreground">Charge: </span>
+                      <span className="text-muted-foreground">{t('guest_charge')}: </span>
                       <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(payElectricityCharge)}</span>
                     </div>
                   </div>
@@ -1332,24 +1336,24 @@ export default function PgBilling() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <Label className="text-sm font-medium">Custom Bill Override</Label>
+                      <Label className="text-sm font-medium">{t('billing_edit_bill')}</Label>
                     </div>
                     <Switch checked={payIsCustomBill} onCheckedChange={setPayIsCustomBill} />
                   </div>
                   {payIsCustomBill ? (
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Custom Total Amount (₹)</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('billing_total_balance_col')}</Label>
                       <Input type="number" value={payCustomTotal} onChange={(e) => setPayCustomTotal(e.target.value)} className="h-9 text-sm font-mono" placeholder="Enter custom total" />
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">Manual Adjustment (₹)</Label>
+                        <Label className="text-xs font-medium text-muted-foreground">{t('billing_previous_due')}</Label>
                         <Input type="number" value={payManualAdjustment} onChange={(e) => setPayManualAdjustment(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                       </div>
                       {parseFloat(payManualAdjustment) !== 0 && (
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-muted-foreground">Adjustment Reason</Label>
+                          <Label className="text-xs font-medium text-muted-foreground">{t('billing_calculation')}</Label>
                           <Textarea value={payAdjustmentReason} onChange={(e) => setPayAdjustmentReason(e.target.value)} className="text-sm min-h-[60px]" placeholder="Reason..." />
                         </div>
                       )}
@@ -1391,7 +1395,7 @@ export default function PgBilling() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Calculator className="h-5 w-5 text-red-600 dark:text-red-400" />
-                            <span className="text-sm font-semibold text-red-800 dark:text-red-200">Rent Accrual Breakdown</span>
+                            <span className="text-sm font-semibold text-red-800 dark:text-red-200">{t('billing_rent_accrual')}</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs">
                             <span className="text-muted-foreground flex items-center gap-1">
@@ -1400,9 +1404,9 @@ export default function PgBilling() {
                             </span>
                             <span className="text-muted-foreground">|</span>
                             <span className="text-muted-foreground">{bucket?.guestStatus === 'Checked-out' ? (
-                              <>Out: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(bucket?.checkOutDate)}</span></>
+                              <>{t('guest_checked_out')}: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(bucket?.checkOutDate)}</span></>
                             ) : (
-                              <>Live: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
+                              <>{t('billing_live')}: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
                             )}</span>
                           </div>
                         </div>
@@ -1410,21 +1414,21 @@ export default function PgBilling() {
                         {/* Formula display */}
                         <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
                           <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
-                            {stayMonths} months × {formatCurrency(monthlyRent)} = {formatCurrency(totalAccruedRent)} accrued
+                            {stayMonths} {t('billing_months')} × {formatCurrency(monthlyRent)} = {formatCurrency(totalAccruedRent)} {t('billing_accrued_rent').toLowerCase()}
                           </span>
                         </div>
 
                         <div className="grid grid-cols-3 gap-3">
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900 p-2">
-                            <p className="text-[10px] text-muted-foreground">Current Bill (latest)</p>
+                            <p className="text-[10px] text-muted-foreground">{t('billing_current_bill')} ({t('billing_latest_cycle')})</p>
                             <p className="text-sm font-bold text-red-800 dark:text-red-200">{formatCurrency(currentBillNow)}</p>
                           </div>
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-900 p-2">
-                            <p className="text-[10px] text-muted-foreground">Previous Due (older)</p>
+                            <p className="text-[10px] text-muted-foreground">{t('billing_previous_due')} ({t('billing_older_cycles')})</p>
                             <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{formatCurrency(previousDueNow)}</p>
                           </div>
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900 p-2">
-                            <p className="text-[10px] text-muted-foreground">Total Paid</p>
+                            <p className="text-[10px] text-muted-foreground">{t('billing_total_paid')}</p>
                             <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(totalAccruedRent - totalBalanceNow)}</p>
                           </div>
                         </div>
@@ -1434,8 +1438,8 @@ export default function PgBilling() {
                         </div>
                         {(confirmPaidBill.paidAmount || 0) > 0 && (
                           <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-red-200 dark:border-red-800 pt-2">
-                            <span>Bill Total: {formatCurrency(payPreviewTotal)}</span>
-                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Already Paid: {formatCurrency(confirmPaidBill.paidAmount || 0)}</span>
+                            <span>{t("billing_total_billed")}: {formatCurrency(payPreviewTotal)}</span>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">{t('billing_paid')}: {formatCurrency(confirmPaidBill.paidAmount || 0)}</span>
                           </div>
                         )}
                       </CardContent>
@@ -1446,20 +1450,20 @@ export default function PgBilling() {
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-center gap-2">
                           <DollarSign className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                          <Label className="text-sm font-semibold text-teal-800 dark:text-teal-200">Payment Amount</Label>
+                          <Label className="text-sm font-semibold text-teal-800 dark:text-teal-200">{t('pay_amount')}</Label>
                         </div>
                         <div className="space-y-1.5">
                           <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)}
                             className="h-10 text-lg font-bold font-mono border-teal-300 dark:border-teal-700 focus-visible:ring-teal-500" placeholder="0" />
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Current Bill: {formatCurrency(currentBillNow)}</span>
+                            <span className="text-muted-foreground">{t('billing_current_bill')}: {formatCurrency(currentBillNow)}</span>
                             <span className="text-muted-foreground">
                               {paymentAmt >= currentBillNow + previousDueNow ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Full settlement</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{t("billing_paid_status")}</span>
                               ) : paymentAmt >= currentBillNow ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Current Bill cleared + surplus to Previous Due</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{t('billing_current_bill')} + {t('billing_previous_due')}</span>
                               ) : (
-                                <span className="text-teal-600 dark:text-teal-400 font-semibold">Partial payment on Current Bill</span>
+                                <span className="text-teal-600 dark:text-teal-400 font-semibold">{t('billing_partial')} {t('billing_current_bill')}</span>
                               )}
                             </span>
                           </div>
@@ -1482,26 +1486,26 @@ export default function PgBilling() {
                               <DollarSign className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                             )}
                             <span className="text-xs font-bold uppercase tracking-wide">
-                              Payment Breakdown (FIFO: Current → Previous)
+                              {t("billing_calculation")} (FIFO: {t('billing_current_bill')} \u2192 {t('billing_previous_due')})
                             </span>
                           </div>
                           <div className="space-y-1.5 text-xs">
                             <div className="flex justify-between bg-white dark:bg-gray-900 rounded px-2 py-1.5 border border-red-100 dark:border-red-900">
-                              <span className="text-red-700 dark:text-red-300 font-medium">① Current Bill</span>
+                              <span className="text-red-700 dark:text-red-300 font-medium">① {t("billing_current_bill")}</span>
                               <span className="font-bold text-red-800 dark:text-red-200">
                                 {formatCurrency(currentBillNow)} − {formatCurrency(paidToCurrent)} = {formatCurrency(currentBillAfter)}
                               </span>
                             </div>
                             {surplusToPrevious > 0 && (
                               <div className="flex justify-between bg-white dark:bg-gray-900 rounded px-2 py-1.5 border border-amber-100 dark:border-amber-900">
-                                <span className="text-amber-700 dark:text-amber-300 font-medium">② Surplus → Previous Due</span>
+                                <span className="text-amber-700 dark:text-amber-300 font-medium">② {t("billing_previous_due")}</span>
                                 <span className="font-bold text-amber-800 dark:text-amber-200">
                                   {formatCurrency(previousDueNow)} − {formatCurrency(surplusToPrevious)} = {formatCurrency(previousDueAfter)}
                                 </span>
                               </div>
                             )}
                             <div className="flex justify-between bg-orange-100 dark:bg-orange-950/40 rounded px-2 py-1.5 border border-orange-200 dark:border-orange-800 mt-1">
-                              <span className="text-orange-800 dark:text-orange-200 font-bold">Total Balance After</span>
+                              <span className="text-orange-800 dark:text-orange-200 font-bold">{t("billing_total_balance")}</span>
                               <span className="font-extrabold text-orange-800 dark:text-orange-200 text-sm">
                                 {formatCurrency(currentBillAfter)} + {formatCurrency(previousDueAfter)} = {formatCurrency(totalBalanceAfter)}
                               </span>
@@ -1518,11 +1522,11 @@ export default function PgBilling() {
               <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
                 <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <div className="text-xs">
-                  <span className="text-muted-foreground">Check-in: </span>
+                  <span className="text-muted-foreground">{t("billing_check_in")}: </span>
                   <span className="font-semibold text-amber-800 dark:text-amber-300">{formatDate(confirmPaidBill.guest.checkInDate)}</span>
-                  <span className="text-muted-foreground ml-2">| Cycle: </span>
+                  <span className="text-muted-foreground ml-2">| {t("billing_calculation")}: </span>
                   <span className="font-semibold text-amber-800 dark:text-amber-300">{confirmPaidBill.guest.billingCycleDate}{getOrdinalSuffix(confirmPaidBill.guest.billingCycleDate)}</span>
-                  <span className="text-muted-foreground ml-2">| Live: </span>
+                  <span className="text-muted-foreground ml-2">| {t("billing_live")}: </span>
                   <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span>
                 </div>
               </div>
@@ -1530,13 +1534,13 @@ export default function PgBilling() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmPaidOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setConfirmPaidOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleConfirmPaid} disabled={confirmPaidSubmitting}
               className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {confirmPaidSubmitting ? (
-                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />{t("loading")}</>
               ) : (
-                <><CheckCircle2 className="mr-2 h-4 w-4" />Confirm Payment</>
+                <><CheckCircle2 className="mr-2 h-4 w-4" />{t("billing_mark_paid")}</>
               )}
             </Button>
           </DialogFooter>
@@ -1549,7 +1553,7 @@ export default function PgBilling() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
               <Pencil className="h-5 w-5" />
-              Edit Bill — Manager Override
+              {t("billing_edit_bill")}
             </DialogTitle>
             <DialogDescription>Modify bill amounts, apply adjustments, or set a custom total</DialogDescription>
           </DialogHeader>
@@ -1559,15 +1563,15 @@ export default function PgBilling() {
               <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
                 <CardContent className="p-4 space-y-2">
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground">Guest</span><p className="font-medium">{editBill.guest.name}</p></div>
+                    <div><span className="text-muted-foreground">Guest</span><p className="font-medium">{getGuestName(editBill.guest.name, editBill.guest.nameHindi)}</p></div>
                     <div><span className="text-muted-foreground">Room</span><p className="font-medium">{editBill.room.roomNo}</p></div>
                     <div><span className="text-muted-foreground">Period</span><p className="font-medium">{formatBillPeriodWithCycleDate(editBill.billingMonth, editBill.billingYear, editBill.guest.billingCycleDate)}</p></div>
-                    <div><span className="text-muted-foreground">Status</span><p><StatusBadge status={editBill.status} /></p></div>
+                    <div><span className="text-muted-foreground">{t("billing_overdue_tab")}</span><p><StatusBadge status={editBill.status} /></p></div>
                   </div>
                   <Separator />
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div><span className="text-muted-foreground">Rent Amount</span><p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(editBill.rentAmount)}</p></div>
-                    <div><span className="text-muted-foreground">Current Electricity</span><p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(editBill.electricityCharge)}</p></div>
+                    <div><span className="text-muted-foreground">{t("guest_electricity")}</span><p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(editBill.electricityCharge)}</p></div>
                   </div>
                 </CardContent>
               </Card>
@@ -1585,21 +1589,21 @@ export default function PgBilling() {
                       <Input type="number" value={editOpeningUnit} onChange={(e) => setEditOpeningUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Ending Unit</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('guest_current_unit')}</Label>
                       <Input type="number" value={editEndingUnit} onChange={(e) => setEditEndingUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Rate / Unit (₹)</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('guest_rate_per_unit')}</Label>
                       <Input type="number" value={editRatePerUnit} onChange={(e) => setEditRatePerUnit(e.target.value)} className="h-9 text-sm font-mono" placeholder="10" />
                     </div>
                   </div>
                   <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 border border-amber-100 dark:border-amber-900">
                     <div className="flex items-center gap-2 text-xs">
                       <Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      <span className="text-muted-foreground">Units: <span className="font-semibold text-foreground">{editUnitsConsumed}</span></span>
+                      <span className="text-muted-foreground">{t("guest_units")}: <span className="font-semibold text-foreground">{editUnitsConsumed}</span></span>
                     </div>
                     <div className="text-xs">
-                      <span className="text-muted-foreground">Charge: </span>
+                      <span className="text-muted-foreground">{t('guest_charge')}: </span>
                       <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(editElectricityCharge)}</span>
                     </div>
                   </div>
@@ -1611,24 +1615,24 @@ export default function PgBilling() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <Label className="text-sm font-medium">Custom Bill Override</Label>
+                      <Label className="text-sm font-medium">{t('billing_edit_bill')}</Label>
                     </div>
                     <Switch checked={isCustomBill} onCheckedChange={setIsCustomBill} />
                   </div>
                   {isCustomBill ? (
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Custom Total Amount (₹)</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('billing_total_balance_col')}</Label>
                       <Input type="number" value={customTotal} onChange={(e) => setCustomTotal(e.target.value)} className="h-9 text-sm font-mono" placeholder="Enter custom total" />
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">Manual Adjustment (₹)</Label>
+                        <Label className="text-xs font-medium text-muted-foreground">{t('billing_previous_due')}</Label>
                         <Input type="number" value={manualAdjustment} onChange={(e) => setManualAdjustment(e.target.value)} className="h-9 text-sm font-mono" placeholder="0" />
                       </div>
                       {parseFloat(manualAdjustment) !== 0 && (
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-muted-foreground">Adjustment Reason</Label>
+                          <Label className="text-xs font-medium text-muted-foreground">{t('billing_calculation')}</Label>
                           <Textarea value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} className="text-sm min-h-[60px]" placeholder="Reason..." />
                         </div>
                       )}
@@ -1648,7 +1652,7 @@ export default function PgBilling() {
                   </div>
                   {!isCustomBill && (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      Rent {formatCurrency(editBill.rentAmount)} + Electricity {formatCurrency(editElectricityCharge)}
+                      {t("guest_rent")} {formatCurrency(editBill.rentAmount)} + {t("guest_electricity")} {formatCurrency(editElectricityCharge)}
                       {parseFloat(manualAdjustment) ? ` + Adj ${formatCurrency(parseFloat(manualAdjustment))}` : ''}
                     </div>
                   )}
@@ -1658,10 +1662,10 @@ export default function PgBilling() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>{t("cancel")}</Button>
             <Button onClick={handleEditSubmit} disabled={editSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {editSubmitting ? (
-                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />{t("saving")}</>
               ) : (
                 <><CheckCircle2 className="mr-2 h-4 w-4" />Save Changes</>
               )}

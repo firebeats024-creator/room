@@ -21,12 +21,14 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getDateComponents } from '@/lib/billing-utils';
+import { useLanguage } from '@/lib/i18n';
 
 // ---------- Types ----------
 
 interface DepositGuest {
   id: string;
   name: string;
+  nameHindi: string;
   phone: string;
   status: string;
   room: {
@@ -70,6 +72,7 @@ function formatDate(dateStr: string | null | undefined): string {
 // ---------- Component ----------
 
 export default function PgDeposits() {
+  const { t, getGuestName } = useLanguage();
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -177,28 +180,28 @@ export default function PgDeposits() {
         return (
           <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100">
             <Clock className="h-3 w-3 mr-1" />
-            Held
+            {t('deposits_held')}
           </Badge>
         );
       case 'Refunded':
         return (
           <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100">
             <CheckCircle2 className="h-3 w-3 mr-1" />
-            Refunded
+            {t('deposits_refunded')}
           </Badge>
         );
       case 'Partially-Refunded':
         return (
           <Badge className="bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 border-teal-200 dark:border-teal-800 hover:bg-teal-100">
             <ArrowRightLeft className="h-3 w-3 mr-1" />
-            Partially Refunded
+            {t('deposits_partially_refunded')}
           </Badge>
         );
       case 'Adjusted':
         return (
           <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100">
             <ArrowRightLeft className="h-3 w-3 mr-1" />
-            Adjusted
+            {t('deposits_adjusted')}
           </Badge>
         );
       default:
@@ -214,10 +217,10 @@ export default function PgDeposits() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
-            Security Deposits
+            {t('deposits_title')}
           </h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Track and manage guest security deposits and refunds
+            {t('deposits_manage')}
           </p>
         </div>
         <Button
@@ -228,7 +231,7 @@ export default function PgDeposits() {
           className="gap-1.5"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('deposits_refresh')}
         </Button>
       </div>
 
@@ -241,7 +244,7 @@ export default function PgDeposits() {
                 <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Deposits Held</p>
+                <p className="text-xs text-muted-foreground">{t('deposits_total_held')}</p>
                 <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
                   {formatCurrency(totalHeld)}
                 </p>
@@ -256,7 +259,7 @@ export default function PgDeposits() {
                 <DollarSign className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Refunded</p>
+                <p className="text-xs text-muted-foreground">{t('deposits_total_refunded')}</p>
                 <p className="text-lg font-bold text-teal-800 dark:text-teal-200">
                   {formatCurrency(totalRefunded)}
                 </p>
@@ -271,9 +274,9 @@ export default function PgDeposits() {
                 <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Active Deposits</p>
+                <p className="text-xs text-muted-foreground">{t('deposits_active')}</p>
                 <p className="text-lg font-bold text-amber-800 dark:text-amber-200">
-                  {activeDepositsCount} deposit{activeDepositsCount !== 1 ? 's' : ''}
+                  {activeDepositsCount} {activeDepositsCount !== 1 ? t('deposits_deposits') : t('deposits_deposit')}
                 </p>
               </div>
             </div>
@@ -300,27 +303,27 @@ export default function PgDeposits() {
           ) : deposits.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <ShieldCheck className="h-12 w-12 mb-3 opacity-40" />
-              <p className="text-lg font-medium">No deposits found</p>
-              <p className="text-sm">Deposits will appear when guests are checked in</p>
+              <p className="text-lg font-medium">{t('deposits_no_deposits')}</p>
+              <p className="text-sm">{t('deposits_appear')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30">
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Guest Name</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Room No</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Deposit Amount</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Status</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Deducted</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">Refund Date</TableHead>
-                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Actions</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('deposits_guest_name')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('deposits_room_no')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('deposits_amount')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('deposits_status')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('deposits_deducted')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('deposits_refund_date')}</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">{t('deposits_actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {deposits.map((deposit) => (
                     <TableRow key={deposit.id} className="group">
-                      <TableCell className="font-medium">{deposit.guest.name}</TableCell>
+                      <TableCell className="font-medium">{getGuestName(deposit.guest.name, deposit.guest.nameHindi)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono text-xs border-emerald-300 dark:border-emerald-700">
                           {deposit.guest.room?.roomNo || '—'}
@@ -351,10 +354,10 @@ export default function PgDeposits() {
                             size="sm"
                             onClick={() => openRefundDialog(deposit)}
                             className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 h-8 px-2"
-                            title="Process Refund"
+                            title={t('deposits_process_refund')}
                           >
                             <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
-                            <span className="hidden sm:inline">Refund</span>
+                            <span className="hidden sm:inline">{t('deposits_refund')}</span>
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -375,10 +378,10 @@ export default function PgDeposits() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
               <ArrowRightLeft className="h-5 w-5" />
-              Process Refund
+              {t('deposits_process_refund')}
             </DialogTitle>
             <DialogDescription>
-              Review deposit details and process a refund
+              {t('deposits_review')}
             </DialogDescription>
           </DialogHeader>
 
@@ -388,16 +391,16 @@ export default function PgDeposits() {
               <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
                 <CardContent className="p-4 space-y-2">
                   <div className="flex items-center gap-2 text-lg font-semibold">
-                    {refundDeposit.guest.name}
+                    {getGuestName(refundDeposit.guest.name, refundDeposit.guest.nameHindi)}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Home className="h-3.5 w-3.5" />
-                      Room {refundDeposit.guest.room?.roomNo || '—'}
+                      {t('rooms_room')} {refundDeposit.guest.room?.roomNo || '—'}
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Shield className="h-3.5 w-3.5" />
-                      Deposit: {formatCurrency(refundDeposit.amount)}
+                      {t('checkout_deposit')}: {formatCurrency(refundDeposit.amount)}
                     </div>
                   </div>
                 </CardContent>
@@ -409,10 +412,10 @@ export default function PgDeposits() {
                   <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                      Pending Bills: {formatCurrency(pendingBillsTotal)}
+                      {t('deposits_pending_bills')}: {formatCurrency(pendingBillsTotal)}
                     </p>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      This guest has unpaid bills. Consider &quot;Adjust Against Bills&quot; to settle dues from the deposit.
+                      {t('deposits_pending_warning')}
                     </p>
                   </div>
                 </div>
@@ -420,18 +423,18 @@ export default function PgDeposits() {
 
               {/* Deduction Amount */}
               <div className="space-y-2">
-                <Label htmlFor="deduction-amount">Deduction Amount (₹)</Label>
+                <Label htmlFor="deduction-amount">{t('deposits_deduction_amount')}</Label>
                 <Input
                   id="deduction-amount"
                   type="number"
-                  placeholder="Amount to deduct from deposit"
+                  placeholder={t('deposits_deduction_placeholder')}
                   value={deductionAmount}
                   onChange={(e) => setDeductionAmount(e.target.value)}
                   min={0}
                   max={refundDeposit.amount}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Amount to deduct before refund (0 for full refund)
+                  {t('deposits_deduction_hint')}
                 </p>
               </div>
 
@@ -439,18 +442,18 @@ export default function PgDeposits() {
               <Card className="border-emerald-200 dark:border-emerald-800">
                 <CardContent className="p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Deposit Amount</span>
+                    <span className="text-muted-foreground">{t('deposits_deposit_amount')}</span>
                     <span className="font-medium">{formatCurrency(refundDeposit.amount)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Deduction</span>
+                    <span className="text-muted-foreground">{t('deposits_deduction')}</span>
                     <span className="font-medium text-red-600 dark:text-red-400">
                       -{formatCurrency(deduction)}
                     </span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-semibold text-emerald-800 dark:text-emerald-200">
-                    <span>Refund Amount</span>
+                    <span>{t('deposits_refund_amount')}</span>
                     <span>{formatCurrency(Math.max(0, refundAmount))}</span>
                   </div>
                 </CardContent>
@@ -458,10 +461,10 @@ export default function PgDeposits() {
 
               {/* Notes */}
               <div className="space-y-2">
-                <Label htmlFor="refund-notes">Notes</Label>
+                <Label htmlFor="refund-notes">{t('deposits_notes')}</Label>
                 <Textarea
                   id="refund-notes"
-                  placeholder="Reason for deduction or refund notes..."
+                  placeholder={t('deposits_notes_placeholder')}
                   value={refundNotes}
                   onChange={(e) => setRefundNotes(e.target.value)}
                   rows={2}
@@ -474,7 +477,7 @@ export default function PgDeposits() {
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Info className="h-3 w-3" />
-                  Choose refund action:
+                  {t('deposits_choose_action')}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <Button
@@ -483,7 +486,7 @@ export default function PgDeposits() {
                     className="bg-emerald-600 hover:bg-emerald-700 text-white w-full"
                   >
                     <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                    Full Refund
+                    {t('deposits_full_refund')}
                   </Button>
                   <Button
                     onClick={() => handleRefund('partial-refund')}
@@ -491,7 +494,7 @@ export default function PgDeposits() {
                     className="bg-teal-600 hover:bg-teal-700 text-white w-full"
                   >
                     <ArrowRightLeft className="mr-1.5 h-4 w-4" />
-                    Partial Refund
+                    {t('deposits_partial_refund')}
                   </Button>
                   <Button
                     onClick={() => handleRefund('adjust-against-bills')}
@@ -499,13 +502,13 @@ export default function PgDeposits() {
                     className="bg-purple-600 hover:bg-purple-700 text-white w-full"
                   >
                     <Receipt className="mr-1.5 h-4 w-4" />
-                    Adjust Bills
+                    {t('deposits_adjust_bills')}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {pendingBillsTotal > 0
-                    ? `Adjust Against Bills will settle ${formatCurrency(pendingBillsTotal)} in unpaid bills from the deposit`
-                    : 'No pending bills to adjust against'}
+                    ? `${t('deposits_adjust_info')} ${formatCurrency(pendingBillsTotal)} ${t('deposits_in_unpaid')}`
+                    : t('deposits_no_pending')}
                 </p>
               </div>
             </div>
@@ -513,7 +516,7 @@ export default function PgDeposits() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRefundOpen(false)} disabled={refundSubmitting}>
-              Cancel
+              {t('cancel')}
             </Button>
           </DialogFooter>
         </DialogContent>

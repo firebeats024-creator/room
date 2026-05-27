@@ -43,6 +43,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useLanguage } from '@/lib/i18n'
 import {
   calculateStayMonths,
   getDateComponents,
@@ -90,6 +91,7 @@ interface ElectricityReading {
 interface GuestFull {
   id: string
   name: string
+  nameHindi: string
   phone: string
   aadhaarNo: string
   emergencyContact: string
@@ -175,6 +177,7 @@ export default function GuestDetailDialog({
   guestId,
   onPaymentSuccess,
 }: GuestDetailDialogProps) {
+  const { getGuestName } = useLanguage()
   const [guestDetail, setGuestDetail] = useState<GuestFull | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -474,7 +477,7 @@ export default function GuestDetailDialog({
               return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
             })() : 0
 
-            const initial = guestDetail.name.charAt(0).toUpperCase()
+            const initial = getGuestName(guestDetail.name, guestDetail.nameHindi).charAt(0).toUpperCase()
             const colorClass = getInitialColor(guestDetail.name)
 
             return (
@@ -488,7 +491,7 @@ export default function GuestDetailDialog({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h2 className="truncate text-lg font-bold">{guestDetail.name}</h2>
+                        <h2 className="truncate text-lg font-bold">{getGuestName(guestDetail.name, guestDetail.nameHindi)}</h2>
                         {isLive && (
                           <Badge className="bg-emerald-400/30 text-white border-emerald-300/40 text-[10px] px-2 py-0.5 shrink-0">
                             <span className="inline-block size-1.5 rounded-full bg-green-300 mr-1.5 animate-pulse" />

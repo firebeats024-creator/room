@@ -51,6 +51,7 @@ import {
   getCurrentBillingPeriod,
   remainingDaysAfterMonths,
 } from '@/lib/billing-utils'
+import { useLanguage } from '@/lib/i18n'
 
 // ─── Types ───
 
@@ -92,6 +93,7 @@ interface ElectricityReading {
 interface GuestFull {
   id: string
   name: string
+  nameHindi: string
   phone: string
   aadhaarNo: string
   emergencyContact: string
@@ -132,6 +134,7 @@ interface DashboardData {
   recentGuests: {
     id: string
     name: string
+    nameHindi: string
     phone: string
     checkInDate: string
     status: string
@@ -220,6 +223,7 @@ function GuestCardSkeleton() {
 // ─── Component ───
 
 export default function PgDashboard() {
+  const { t, getGuestName } = useLanguage()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -311,7 +315,7 @@ export default function PgDashboard() {
     if (!guestDetail) return
     const amount = parseFloat(customPayAmount) || 0
     if (amount <= 0) {
-      toast.error('Enter a valid payment amount')
+      toast.error(t('pay_enter_amount'))
       return
     }
 
@@ -407,49 +411,49 @@ export default function PgDashboard() {
   const statCards = data
     ? [
         {
-          title: 'Total Rooms',
+          title: t('dash_total_rooms'),
           value: data.totalRooms,
-          subtitle: `${data.occupancyRate}% occupancy`,
+          subtitle: `${data.occupancyRate}% ${t('dash_occupancy')}`,
           icon: Home,
           color: 'text-emerald-600',
           bg: 'bg-emerald-50 dark:bg-emerald-950/40',
         },
         {
-          title: 'Occupied',
+          title: t('dash_occupied'),
           value: data.occupiedRooms,
-          subtitle: `${data.activeGuests} active guests`,
+          subtitle: `${data.activeGuests} ${t('dash_active_guests')}`,
           icon: CheckCircle2,
           color: 'text-teal-600',
           bg: 'bg-teal-50 dark:bg-teal-950/40',
         },
         {
-          title: 'Vacant',
+          title: t('dash_vacant'),
           value: data.vacantRooms,
-          subtitle: `${data.maintenanceRooms} maintenance`,
+          subtitle: `${data.maintenanceRooms} ${t('dash_maintenance')}`,
           icon: BedDouble,
           color: 'text-amber-600',
           bg: 'bg-amber-50 dark:bg-amber-950/40',
         },
         {
-          title: 'Monthly Revenue',
+          title: t('dash_monthly_revenue'),
           value: formatCurrency(data.totalRevenue),
-          subtitle: 'Total collected revenue',
+          subtitle: t('dash_total_collected'),
           icon: DollarSign,
           color: 'text-emerald-600',
           bg: 'bg-emerald-50 dark:bg-emerald-950/40',
         },
         {
-          title: 'Due Bills (Overdue)',
+          title: t('dash_due_bills_overdue'),
           value: data.overdueBills,
-          subtitle: `Total due: ${formatCurrency(data.overdueAmount)}`,
+          subtitle: `${t('dash_total_due')}: ${formatCurrency(data.overdueAmount)}`,
           icon: AlertCircle,
           color: 'text-rose-600',
           bg: 'bg-rose-50 dark:bg-rose-950/40',
         },
         {
-          title: 'Active Deposits',
+          title: t('dash_active_deposits'),
           value: data.activeDeposits,
-          subtitle: formatCurrency(data.totalDepositAmount) + ' held',
+          subtitle: `${formatCurrency(data.totalDepositAmount)} ${t('dash_held')}`,
           icon: Shield,
           color: 'text-violet-600',
           bg: 'bg-violet-50 dark:bg-violet-950/40',
@@ -462,7 +466,7 @@ export default function PgDashboard() {
       {/* Header with Gear Icon Dropdown */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Dashboard
+          {t('dash_dashboard')}
         </h2>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -481,7 +485,7 @@ export default function PgDashboard() {
               className="gap-2 cursor-pointer"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+              <span>{loading ? t('dash_refreshing') : t('dash_refresh')}</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleExport}
@@ -489,7 +493,7 @@ export default function PgDashboard() {
               className="gap-2 cursor-pointer"
             >
               <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
-              <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
+              <span>{exporting ? t('header_exporting') : t('header_export_excel')}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -509,7 +513,7 @@ export default function PgDashboard() {
               onClick={fetchDashboard}
               className="ml-auto text-rose-600 hover:text-rose-700"
             >
-              Retry
+              {t('dash_retry')}
             </Button>
           </CardContent>
         </Card>
@@ -549,7 +553,7 @@ export default function PgDashboard() {
       <div>
         <div className="flex items-center gap-2 mb-4">
           <AlertCircle className="size-5 text-red-500" />
-          <h3 className="text-lg font-semibold">Due Guests</h3>
+          <h3 className="text-lg font-semibold">{t('dash_due_guests')}</h3>
           {data && (
             <Badge variant="outline" className="border-red-200 text-red-700 text-xs">
               {guestsWithDue.length}
@@ -576,13 +580,13 @@ export default function PgDashboard() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="flex size-10 items-center justify-center rounded-full bg-red-500 text-white text-sm font-bold shrink-0">
-                        {guest.name.charAt(0).toUpperCase()}
+                        {getGuestName(guest.name, guest.nameHindi).charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-bold text-[16px] text-gray-900 truncate tracking-tight">{guest.name}</p>
+                        <p className="font-bold text-[16px] text-gray-900 truncate tracking-tight">{getGuestName(guest.name, guest.nameHindi)}</p>
                         <p className="text-gray-400 text-[12px] font-medium flex items-center gap-1">
                           <BedDouble className="h-3 w-3" />
-                          Room {guest.room.roomNo} · {guest.room.type}
+                          {t('rooms_room')} {guest.room.roomNo} · {guest.room.type}
                         </p>
                       </div>
                     </div>
@@ -598,11 +602,11 @@ export default function PgDashboard() {
                     <span className="text-gray-400 flex items-center gap-1.5 text-[13px]">
                       <Calendar className="h-3.5 w-3.5" />
                       <span className="text-gray-500 font-medium">{formatCurrency(guest.billing.totalAccruedRent)}</span>
-                      <span className="text-gray-400">accrued</span>
+                      <span className="text-gray-400">{t('dash_accrued')}</span>
                     </span>
                     <span className="text-emerald-600 font-semibold flex items-center gap-1 text-[13px]">
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                      {formatCurrency(guest.billing.totalPaid)} paid
+                      {formatCurrency(guest.billing.totalPaid)} {t('dash_paid')}
                     </span>
                   </div>
                 </div>
@@ -611,15 +615,15 @@ export default function PgDashboard() {
                 <div className="px-4 pb-3">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl bg-pink-50 p-2.5 text-center">
-                      <p className="text-[10px] font-semibold text-pink-400 mb-1 tracking-wide">CURRENT BILL</p>
+                      <p className="text-[10px] font-semibold text-pink-400 mb-1 tracking-wide">{t('dash_current_bill')}</p>
                       <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.currentMonthBill)}</p>
                     </div>
                     <div className="rounded-xl bg-yellow-50 p-2.5 text-center">
-                      <p className="text-[10px] font-semibold text-yellow-500 mb-1 tracking-wide">PREVIOUS DUE</p>
+                      <p className="text-[10px] font-semibold text-yellow-500 mb-1 tracking-wide">{t('dash_previous_due')}</p>
                       <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.previousDue)}</p>
                     </div>
                     <div className="rounded-xl bg-red-50 p-2.5 text-center">
-                      <p className="text-[10px] font-semibold text-red-400 mb-1 tracking-wide">TOTAL DUE</p>
+                      <p className="text-[10px] font-semibold text-red-400 mb-1 tracking-wide">{t('dash_total_due_label')}</p>
                       <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.totalOutstanding)}</p>
                     </div>
                   </div>
@@ -629,11 +633,11 @@ export default function PgDashboard() {
                 <div className="px-4 py-2.5 border-t border-gray-50 flex items-center justify-between">
                   <span className="text-gray-400 flex items-center gap-1.5 text-[12px]">
                     <Calendar className="h-3 w-3" />
-                    <span className="text-gray-500">Check-in:</span> {formatDate(guest.checkInDate)}
+                    <span className="text-gray-500">{t('dash_check_in')}:</span> {formatDate(guest.checkInDate)}
                   </span>
                   <span className="text-gray-400 flex items-center gap-1.5 text-[12px]">
                     <Clock className="h-3 w-3" />
-                    <span className="text-gray-500">Cycle:</span> {guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)}
+                    <span className="text-gray-500">{t('dash_cycle')}:</span> {guest.billingCycleDate}{getOrdinalSuffix(guest.billingCycleDate)}
                   </span>
                 </div>
               </div>
@@ -644,7 +648,7 @@ export default function PgDashboard() {
             <CardContent className="flex flex-col items-center justify-center py-12">
               <CheckCircle2 className="size-10 text-emerald-300 mb-3" />
               <p className="text-sm text-gray-400">
-                No due guests — all bills are paid! 🎉
+                {t('dash_no_due_guests')}
               </p>
             </CardContent>
           </Card>
@@ -655,7 +659,7 @@ export default function PgDashboard() {
       <Dialog open={guestDetailOpen} onOpenChange={setGuestDetailOpen}>
         <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0 gap-0">
           {/* Visually hidden title for screen reader accessibility */}
-          <DialogTitle className="sr-only">Guest Details</DialogTitle>
+          <DialogTitle className="sr-only">{t('guest_details_title')}</DialogTitle>
           <DialogDescription className="sr-only">View guest details and billing information</DialogDescription>
           {guestDetailLoading ? (
             <div className="p-6 space-y-4">
@@ -718,7 +722,7 @@ export default function PgDashboard() {
                       <div>
                         <h3 className="text-base font-bold leading-tight">{guestDetail.name}</h3>
                         <p className="text-emerald-100 text-xs mt-0.5">
-                          Room {guestDetail.room.roomNo} · {guestDetail.room.type} · {formatCurrency(monthlyRent)}/mo
+                          {t('rooms_room')} {guestDetail.room.roomNo} · {guestDetail.room.type} · {formatCurrency(monthlyRent)}/mo
                         </p>
                       </div>
                     </div>
@@ -727,7 +731,7 @@ export default function PgDashboard() {
                         ? 'bg-emerald-400/30 text-white border-emerald-300/40'
                         : 'bg-amber-400/30 text-white border-amber-300/40'
                     }`}>
-                      {isLive ? '● Live' : 'Checked Out'}
+                      {isLive ? t('guest_live') : t('guest_checked_out')}
                     </Badge>
                   </div>
                 </div>
@@ -736,34 +740,34 @@ export default function PgDashboard() {
                 <div className="px-5 py-4 space-y-3">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Users className="h-3.5 w-3.5" />
-                    Personal Information
+                    {t('guest_personal_info')}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Contact</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_contact')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.phone || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Aadhaar</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_aadhaar')}</span>
                       <p className="font-medium text-gray-800 font-mono sm:mt-0.5">{guestDetail.aadhaarNo || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Occupation</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_occupation')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">
                         {guestDetail.occupation || '—'}
                         {guestDetail.workLocation && <span className="text-gray-400"> at {guestDetail.workLocation}</span>}
                       </p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Members</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_members_label')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.totalMembers} member{guestDetail.totalMembers !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Emergency Contact</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_emergency_contact')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">{guestDetail.emergencyContact || '—'}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-gray-400 text-xs sm:text-sm">Security Deposit</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{t('guest_security_deposit')}</span>
                       <p className="font-medium text-gray-800 sm:mt-0.5">
                         {formatCurrency(guestDetail.securityDeposit?.amount ?? 0)}
                         {guestDetail.securityDeposit && (
@@ -778,20 +782,20 @@ export default function PgDashboard() {
                 <div className="px-5 py-4 bg-gray-50/60 space-y-3">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5" />
-                    Stay Details
+                    {t('guest_stay_details')}
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                      <p className="text-[10px] text-gray-400 mb-0.5">Check-in</p>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_check_in')}</p>
                       <p className="text-sm font-semibold text-gray-800">{formatDate(guestDetail.checkInDate)}</p>
                     </div>
                     <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                      <p className="text-[10px] text-gray-400 mb-0.5">Billing Cycle</p>
+                      <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_billing_cycle')}</p>
                       <p className="text-sm font-semibold text-gray-800">{guestDetail.billingCycleDate}{getOrdinalSuffix(guestDetail.billingCycleDate)}</p>
                     </div>
                     {isLive && (
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Total Stay</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_total_stay')}</p>
                         <p className="text-sm font-semibold text-gray-800">
                           {stayMonths}m{stayRemainingDays > 0 ? ` ${stayRemainingDays}d` : ''}
                         </p>
@@ -799,13 +803,13 @@ export default function PgDashboard() {
                     )}
                     {isLive && (
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Live As Of</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_live_as_of')}</p>
                         <p className="text-sm font-semibold text-emerald-700">{formatDate(nowLocalStr)}</p>
                       </div>
                     )}
                     {guestDetail.checkOutDate && (
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Check-out</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_check_out')}</p>
                         <p className="text-sm font-semibold text-amber-700">{formatDate(guestDetail.checkOutDate)}</p>
                       </div>
                     )}
@@ -818,23 +822,23 @@ export default function PgDashboard() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <CreditCard className="h-3.5 w-3.5" />
-                        Live Billing Status
+                        {t('guest_live_billing_status')}
                       </h4>
                       <span className="text-[10px] text-gray-400">
-                        {daysStayed} days · {formatCurrency(totalAccruedRent)} total accrued
+                        {daysStayed} {t('guest_days')} · {formatCurrency(totalAccruedRent)} {t('guest_total_accrued')}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="rounded-lg bg-red-50 border border-red-100 p-2.5 text-center">
-                        <p className="text-[10px] text-red-400 mb-0.5">Current Bill</p>
+                        <p className="text-[10px] text-red-400 mb-0.5">{t('guest_current_bill')}</p>
                         <p className="text-sm font-bold text-red-700">{formatCurrency(currentMonthBill)}</p>
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-100 p-2.5 text-center">
-                        <p className="text-[10px] text-amber-500 mb-0.5">Previous Due</p>
+                        <p className="text-[10px] text-amber-500 mb-0.5">{t('guest_previous_due')}</p>
                         <p className="text-sm font-bold text-amber-700">{formatCurrency(previousDue)}</p>
                       </div>
                       <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2.5 text-center">
-                        <p className="text-[10px] text-emerald-500 mb-0.5">Total Paid</p>
+                        <p className="text-[10px] text-emerald-500 mb-0.5">{t('guest_total_paid')}</p>
                         <p className="text-sm font-bold text-emerald-700">{formatCurrency(totalPaid)}</p>
                       </div>
                     </div>
@@ -842,7 +846,7 @@ export default function PgDashboard() {
                     {totalOutstanding > 0 ? (
                       <div className="flex items-center justify-between bg-red-50 rounded-lg p-3 border border-red-200">
                         <div>
-                          <p className="text-xs font-semibold text-red-800">Total Outstanding</p>
+                          <p className="text-xs font-semibold text-red-800">{t('guest_total_outstanding')}</p>
                           <p className="text-lg font-bold text-red-800">{formatCurrency(totalOutstanding)}</p>
                         </div>
                         <Button
@@ -854,13 +858,13 @@ export default function PgDashboard() {
                           }}
                         >
                           <IndianRupee className="h-3.5 w-3.5 mr-1" />
-                          Pay Now
+                          {t('guest_pay_now')}
                         </Button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
                         <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        <span className="font-medium">All dues cleared — no outstanding balance.</span>
+                        <span className="font-medium">{t('guest_all_dues_cleared')}</span>
                       </div>
                     )}
                   </div>
@@ -872,7 +876,7 @@ export default function PgDashboard() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                         <Zap className="h-3.5 w-3.5" />
-                        Electricity
+                        {t('guest_electricity')}
                       </h4>
                       <Button
                         size="sm"
@@ -885,30 +889,30 @@ export default function PgDashboard() {
                         }}
                       >
                         <Zap className="h-3 w-3 sm:mr-1" />
-                        <span className="hidden sm:inline">Update</span>
+                        <span className="hidden sm:inline">{t('guest_update')}</span>
                       </Button>
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Opening Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_opening_unit')}</p>
                         <p className="text-sm font-bold font-mono text-emerald-700">{openingReading}</p>
                       </div>
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Current Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_current_unit')}</p>
                         <p className="text-sm font-bold font-mono text-gray-800">{currReading}</p>
                       </div>
                       <div className="rounded-lg bg-white border border-gray-100 p-2.5 text-center">
-                        <p className="text-[10px] text-gray-400 mb-0.5">Rate/Unit</p>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{t('guest_rate_per_unit')}</p>
                         <p className="text-sm font-bold font-mono text-gray-800">₹{ratePerUnit}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-200">
                       <div className="flex items-center gap-2 text-sm">
                         <Zap className="h-4 w-4 text-amber-500" />
-                        <span className="text-gray-500">Units: <span className="font-semibold text-gray-800">{unitsConsumed}</span></span>
+                        <span className="text-gray-500">{t('guest_units')}: <span className="font-semibold text-gray-800">{unitsConsumed}</span></span>
                       </div>
                       <div className="text-sm">
-                        <span className="text-gray-500">Charge: </span>
+                        <span className="text-gray-500">{t('guest_charge')}: </span>
                         <span className="font-bold text-amber-700">{formatCurrency(elecCharge)}</span>
                       </div>
                     </div>
@@ -920,7 +924,7 @@ export default function PgDashboard() {
                   <div className="px-5 py-4 space-y-3">
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Payment History ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
+                      {t('guest_payment_history')} ({guestDetail.bills.filter((b) => b.status === 'Paid').length})
                     </h4>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {guestDetail.bills
@@ -937,9 +941,9 @@ export default function PgDashboard() {
                                 <span className="text-sm font-medium text-gray-800">{MONTH_NAMES[bill.billingMonth - 1]} {bill.billingYear}</span>
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                                <span>Rent: {formatCurrency(bill.rentAmount)}</span>
-                                {bill.electricityCharge > 0 && <span>Elec: {formatCurrency(bill.electricityCharge)}</span>}
-                                <span>Total: {formatCurrency(bill.totalAmount)}</span>
+                                <span>{t('guest_rent')}: {formatCurrency(bill.rentAmount)}</span>
+                                {bill.electricityCharge > 0 && <span>{t('guest_elec')}: {formatCurrency(bill.electricityCharge)}</span>}
+                                <span>{t('guest_total')}: {formatCurrency(bill.totalAmount)}</span>
                               </div>
                             </div>
                           </div>
@@ -951,7 +955,7 @@ export default function PgDashboard() {
                 {/* Footer */}
                 <div className="px-5 py-3 bg-gray-50/60 flex justify-end">
                   <Button variant="outline" onClick={() => setGuestDetailOpen(false)} className="border-gray-200 text-gray-600 hover:bg-gray-100 text-xs h-8">
-                    Close
+                    {t('close')}
                   </Button>
                 </div>
               </div>
@@ -980,7 +984,7 @@ export default function PgDashboard() {
           <div className="space-y-4 py-2">
             {/* Outstanding display */}
             <div className="flex items-center justify-between bg-red-50 rounded-lg p-3 border border-red-200">
-              <span className="text-sm text-red-700 font-medium">Total Outstanding</span>
+              <span className="text-sm text-red-700 font-medium">{t('guest_total_outstanding')}</span>
               <span className="text-lg font-bold text-red-800">
                 {formatCurrency(customPayTotalOutstanding)}
               </span>
@@ -989,7 +993,7 @@ export default function PgDashboard() {
             {/* Payment Amount */}
             <div className="space-y-2">
               <Label htmlFor="dashCustomPayAmount">
-                Payment Amount (₹) <span className="text-red-500">*</span>
+                {t('pay_amount')} <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="dashCustomPayAmount"
@@ -1009,7 +1013,7 @@ export default function PgDashboard() {
                   className="text-xs h-7 flex-1"
                   onClick={() => setCustomPayAmount(String(customPayTotalOutstanding))}
                 >
-                  Full Amount
+                  {t('pay_full_amount')}
                 </Button>
                 {customPayTotalOutstanding > 0 && (
                   <Button
@@ -1054,7 +1058,7 @@ export default function PgDashboard() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setCustomPayOpen(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleCustomPay}
@@ -1064,12 +1068,12 @@ export default function PgDashboard() {
               {customPaySubmitting ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                  Processing...
+                  {t('pay_paying')}
                 </>
               ) : (
                 <>
                   <IndianRupee className="h-4 w-4 mr-1" />
-                  Confirm Payment
+                  {t('pay_submit')}
                 </>
               )}
             </Button>
@@ -1083,7 +1087,7 @@ export default function PgDashboard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-yellow-700">
               <Zap className="h-5 w-5" />
-              Update Electricity Reading
+              {t('elec_update_reading')}
             </DialogTitle>
             <DialogDescription>
               Enter the current meter reading — units & charge will auto-calculate
@@ -1124,7 +1128,7 @@ export default function PgDashboard() {
                   {/* New Reading Input */}
                   <div className="space-y-2">
                     <Label htmlFor="dashElecNewReading">
-                      New Meter Reading <span className="text-red-500">*</span>
+                      {t('elec_new_reading')} <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="dashElecNewReading"
@@ -1177,7 +1181,7 @@ export default function PgDashboard() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setElecUpdateOpen(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleElecUpdate}
@@ -1187,12 +1191,12 @@ export default function PgDashboard() {
               {elecSubmitting ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
+                  {t('elec_updating')}
                 </>
               ) : (
                 <>
                   <Zap className="mr-2 h-4 w-4" />
-                  Update Reading
+                  {t('elec_submit')}
                 </>
               )}
             </Button>

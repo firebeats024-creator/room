@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -12,6 +13,7 @@ interface AdminLoginProps {
 }
 
 export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
+  const { t } = useLanguage()
   const [isSetup, setIsSetup] = useState(false)
   const [checking, setChecking] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -56,7 +58,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!username || !password) {
-      toast.error('Please enter username and password')
+      toast.error(t('login_all_fields'))
       return
     }
     setLoading(true)
@@ -69,7 +71,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
       const data = await res.json()
 
       if (!res.ok) {
-        toast.error(data.error || 'Invalid credentials')
+        toast.error(data.error || t('login_invalid_credentials'))
         return
       }
 
@@ -79,10 +81,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
         localStorage.setItem('admin_name', data.name || 'Admin')
       }
 
-      toast.success('Login successful!')
+      toast.success(t('login_success'))
       onLoginSuccess(data.token, data.name || 'Admin')
     } catch {
-      toast.error('Login failed. Please try again.')
+      toast.error(t('login_failed'))
     } finally {
       setLoading(false)
     }
@@ -91,15 +93,15 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!setupUsername || !setupPassword) {
-      toast.error('Please fill all required fields')
+      toast.error(t('setup_fill_required'))
       return
     }
     if (setupPassword.length < 4) {
-      toast.error('Password must be at least 4 characters')
+      toast.error(t('login_min_4'))
       return
     }
     if (setupPassword !== setupConfirmPassword) {
-      toast.error('Passwords do not match')
+      toast.error(t('setup_no_match'))
       return
     }
     setLoading(true)
@@ -154,7 +156,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-          <p className="text-sm text-gray-500">Loading...</p>
+          <p className="text-sm text-gray-500">{t('loading')}</p>
         </div>
       </div>
     )
@@ -171,47 +173,47 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 <ShieldCheck className="h-8 w-8 text-white" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold text-gray-900">Create Admin Account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-gray-900">{t('setup_title')}</CardTitle>
             <CardDescription className="text-gray-500">
-              First time? Set up your admin credentials to get started
+              {t('setup_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSetup} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Full Name</label>
+                <label className="text-sm font-medium text-gray-700">{t('setup_full_name')}</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     value={setupName}
                     onChange={(e) => setSetupName(e.target.value)}
-                    placeholder="Enter your name"
+                    placeholder={t('setup_enter_name')}
                     className="pl-10 h-11"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Username <span className="text-red-500">*</span></label>
+                <label className="text-sm font-medium text-gray-700">{t('setup_username')} <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     value={setupUsername}
                     onChange={(e) => setSetupUsername(e.target.value)}
-                    placeholder="Choose a username"
+                    placeholder={t('setup_choose_username')}
                     className="pl-10 h-11"
                     required
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Password <span className="text-red-500">*</span></label>
+                <label className="text-sm font-medium text-gray-700">{t('setup_password')} <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     type={showSetupPassword ? 'text' : 'password'}
                     value={setupPassword}
                     onChange={(e) => setSetupPassword(e.target.value)}
-                    placeholder="Min 4 characters"
+                    placeholder={t('setup_min_4')}
                     className="pl-10 pr-10 h-11"
                     required
                   />
@@ -225,14 +227,14 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Confirm Password <span className="text-red-500">*</span></label>
+                <label className="text-sm font-medium text-gray-700">{t('setup_confirm_password')} <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     type="password"
                     value={setupConfirmPassword}
                     onChange={(e) => setSetupConfirmPassword(e.target.value)}
-                    placeholder="Re-enter password"
+                    placeholder={t('setup_reenter')}
                     className="pl-10 h-11"
                     required
                   />
@@ -246,10 +248,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Creating...
+                    {t('setup_creating')}
                   </>
                 ) : (
-                  'Create Admin Account'
+                  t('setup_create')
                 )}
               </Button>
             </form>
@@ -261,7 +263,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 className="w-full flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors py-2 rounded-lg hover:bg-gray-50"
               >
                 <Building2 className="h-4 w-4" />
-                Back to Login
+                {t('setup_back_login')}
               </button>
             </div>
           </CardContent>
@@ -280,21 +282,21 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
               <Building2 className="h-8 w-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-gray-900">Room Rent</CardTitle>
+          <CardTitle className="text-2xl font-bold text-gray-900">{t('login_title')}</CardTitle>
           <CardDescription className="text-gray-500">
-            Manager — Admin Login
+            {t('login_subtitle')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Username</label>
+              <label className="text-sm font-medium text-gray-700">{t('login_username')}</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder={t('login_enter_username')}
                   className="pl-10 h-11"
                   autoComplete="username"
                   required
@@ -302,14 +304,14 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Password</label>
+              <label className="text-sm font-medium text-gray-700">{t('login_password')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder={t('login_enter_password')}
                   className="pl-10 pr-10 h-11"
                   autoComplete="current-password"
                   required
@@ -331,10 +333,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Logging in...
+                  {t('login_logging_in')}
                 </>
               ) : (
-                'Login'
+                t('login_button')
               )}
             </Button>
           </form>
@@ -347,30 +349,30 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 onClick={() => setShowForgotPassword(true)}
                 className="w-full text-center text-sm text-emerald-600 hover:text-emerald-700 font-medium transition-colors py-2 rounded-lg hover:bg-emerald-50"
               >
-                Forgot Password?
+                {t('login_forgot_password')}
               </button>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
                   <KeyRound className="h-4 w-4 text-emerald-600" />
-                  Reset Password
+                  {t('login_reset_password')}
                 </div>
                 <p className="text-xs text-gray-500">
-                  Enter your username, new password, and the server reset key to reset your password.
+                  {t('login_reset_desc')}
                 </p>
                 <form
                   onSubmit={async (e) => {
                     e.preventDefault()
                     if (!resetUsername || !resetNewPassword || !resetKey) {
-                      toast.error('All fields are required')
+                      toast.error(t('login_all_fields'))
                       return
                     }
                     if (resetNewPassword.length < 4) {
-                      toast.error('Password must be at least 4 characters')
+                      toast.error(t('login_min_4'))
                       return
                     }
                     if (resetNewPassword !== resetConfirmPassword) {
-                      toast.error('Passwords do not match')
+                      toast.error(t('login_no_match'))
                       return
                     }
                     setResetLoading(true)
@@ -405,27 +407,27 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                   className="space-y-3"
                 >
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">Username</label>
+                    <label className="text-xs font-medium text-gray-600">{t('login_username')}</label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <Input
                         value={resetUsername}
                         onChange={(e) => setResetUsername(e.target.value)}
-                        placeholder="Enter your username"
+                        placeholder={t('login_enter_username')}
                         className="pl-9 h-9 text-sm"
                         required
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">New Password</label>
+                    <label className="text-xs font-medium text-gray-600">{t('login_new_password')}</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <Input
                         type={showResetNewPassword ? 'text' : 'password'}
                         value={resetNewPassword}
                         onChange={(e) => setResetNewPassword(e.target.value)}
-                        placeholder="Min 4 characters"
+                        placeholder={t('setup_min_4')}
                         className="pl-9 pr-9 h-9 text-sm"
                         required
                       />
@@ -439,14 +441,14 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-600">Confirm New Password</label>
+                    <label className="text-xs font-medium text-gray-600">{t('login_confirm_new_password')}</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                       <Input
                         type="password"
                         value={resetConfirmPassword}
                         onChange={(e) => setResetConfirmPassword(e.target.value)}
-                        placeholder="Re-enter new password"
+                        placeholder={t('setup_reenter')}
                         className="pl-9 h-9 text-sm"
                         required
                       />
@@ -454,7 +456,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-gray-600">
-                      Reset Key
+                      {t('login_reset_key')}
                     </label>
                     <div className="relative">
                       <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -462,7 +464,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                         type="password"
                         value={resetKey}
                         onChange={(e) => setResetKey(e.target.value)}
-                        placeholder="Enter reset key"
+                        placeholder={t('login_enter_reset_key')}
                         className="pl-9 h-9 text-sm"
                         required
                       />
@@ -481,7 +483,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                         setResetKey('')
                       }}
                     >
-                      Cancel
+                      {t('cancel')}
                     </Button>
                     <Button
                       type="submit"
@@ -491,10 +493,10 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                       {resetLoading ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                          Resetting...
+                          {t('login_resetting')}
                         </>
                       ) : (
-                        'Reset Password'
+                        t('login_reset_button')
                       )}
                     </Button>
                   </div>

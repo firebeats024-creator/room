@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Building2, LayoutDashboard, BedDouble, Users, Receipt, ShieldCheck, Settings, Download, Code2, FilePlus2, Database, RefreshCw, Trash2, AlertTriangle, LogOut } from 'lucide-react'
+import { Building2, LayoutDashboard, BedDouble, Users, Receipt, ShieldCheck, Settings, Download, Code2, FilePlus2, Database, RefreshCw, Trash2, AlertTriangle, LogOut, Languages } from 'lucide-react'
 import PgDashboard from '@/components/pg-dashboard'
 import PgRooms from '@/components/pg-rooms'
 import PgGuests from '@/components/pg-guests'
@@ -22,17 +22,20 @@ import PgBilling from '@/components/pg-billing'
 import PgDeposits from '@/components/pg-deposits'
 import AdminLogin from '@/components/admin-login'
 import AdminManager from '@/components/admin-manager'
+import { LanguageProvider, useLanguage } from '@/lib/i18n'
 import { toast } from 'sonner'
 
-const navItems = [
-  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { id: 'rooms', label: 'Rooms', icon: BedDouble },
-  { id: 'guests', label: 'Guests', icon: Users },
-  { id: 'billing', label: 'Billing', icon: Receipt },
-  { id: 'deposits', label: 'Deposits', icon: ShieldCheck },
-]
+function AppContent() {
+  const { t, lang, setLang } = useLanguage()
+  
+  const navItems = [
+    { id: 'dashboard', label: t('nav_home'), icon: LayoutDashboard },
+    { id: 'rooms', label: t('nav_rooms'), icon: BedDouble },
+    { id: 'guests', label: t('nav_guests'), icon: Users },
+    { id: 'billing', label: t('nav_billing'), icon: Receipt },
+    { id: 'deposits', label: t('nav_deposits'), icon: ShieldCheck },
+  ]
 
-export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
   const [adminName, setAdminName] = useState('Admin')
@@ -86,7 +89,6 @@ export default function Home() {
   const handleLoginSuccess = (token: string, name: string) => {
     setIsAuthenticated(true)
     setAdminName(name)
-    // Get adminId from token
     checkAuth()
   }
 
@@ -100,22 +102,20 @@ export default function Home() {
     localStorage.removeItem('admin_name')
     setIsAuthenticated(false)
     setAdminName('Admin')
-    toast.success('Logged out successfully')
+    toast.success(lang === 'hi' ? 'सफलतापूर्वक लॉगआउट' : 'Logged out successfully')
   }
 
-  // Show loading while checking auth
   if (authChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
         <div className="flex items-center gap-2 text-emerald-600">
           <RefreshCw className="h-5 w-5 animate-spin" />
-          <span className="text-sm font-medium">Loading...</span>
+          <span className="text-sm font-medium">{t('loading')}</span>
         </div>
       </div>
     )
   }
 
-  // Show login if not authenticated
   if (!isAuthenticated) {
     return <AdminLogin onLoginSuccess={handleLoginSuccess} />
   }
@@ -134,9 +134,9 @@ export default function Home() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success('Export downloaded!')
+      toast.success(lang === 'hi' ? 'एक्सपोर्ट डाउनलोड हुआ!' : 'Export downloaded!')
     } catch {
-      toast.error('Export failed')
+      toast.error(lang === 'hi' ? 'एक्सपोर्ट विफल' : 'Export failed')
     } finally {
       setExporting(false)
     }
@@ -173,9 +173,9 @@ export default function Home() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success('Source code downloaded!')
+      toast.success(lang === 'hi' ? 'सोर्स कोड डाउनलोड हुआ!' : 'Source code downloaded!')
     } catch {
-      toast.error('Download failed')
+      toast.error(lang === 'hi' ? 'डाउनलोड विफल' : 'Download failed')
     } finally {
       setDownloading(false)
     }
@@ -191,15 +191,20 @@ export default function Home() {
         return
       }
       const d = seedData.deleted
-      toast.success(`All data cleared! ${d.guests} guests, ${d.bills} bills, ${d.rooms} rooms removed`)
+      toast.success(lang === 'hi'
+        ? `सारा डेटा साफ़! ${d.guests} किराएदार, ${d.bills} बिल, ${d.rooms} कमरे हटाए`
+        : `All data cleared! ${d.guests} guests, ${d.bills} bills, ${d.rooms} rooms removed`
+      )
+      // Refresh the page to reload all components with empty data
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
     } catch {
-      toast.error('Failed to reset data')
+      toast.error(lang === 'hi' ? 'डेटा रीसेट विफल' : 'Failed to reset data')
     } finally {
       setSeeding(false)
     }
   }
-
-  // ─── 2-Step Warning Helpers ───
 
   const openStep1 = (action: 'reset' | 'source') => {
     setStep1Action(action)
@@ -208,16 +213,14 @@ export default function Home() {
 
   const handleStep1Continue = () => {
     setStep1Open(false)
-    // After step 1 confirmed, open step 2
     setStep2Action(step1Action)
     setConfirmText('')
-    // Small delay so the first dialog closes before second opens
     setTimeout(() => setStep2Open(true), 200)
   }
 
   const handleStep2Confirm = () => {
     if (confirmText !== 'DELETE') {
-      toast.error('Type DELETE to confirm')
+      toast.error(lang === 'hi' ? 'पुष्टि के लिए DELETE टाइप करें' : 'Type DELETE to confirm')
       return
     }
     setStep2Open(false)
@@ -232,31 +235,31 @@ export default function Home() {
 
   const step1Config = step1Action === 'reset'
     ? {
-        title: '⚠️ Reset All Data?',
-        description: 'This will permanently delete ALL rooms, guests, bills, deposits, and electricity readings. This action cannot be undone.',
+        title: t('reset_step1_title'),
+        description: t('reset_step1_desc'),
         icon: <Trash2 className="h-5 w-5 text-red-500" />,
-        confirmLabel: 'Continue to Final Step',
+        confirmLabel: t('reset_continue'),
         confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
       }
     : {
-        title: '⚠️ Download Source Code?',
-        description: 'This will create and download a ZIP file of the entire application source code. The file may take a moment to generate.',
+        title: t('source_step1_title'),
+        description: t('source_step1_desc'),
         icon: <Code2 className="h-5 w-5 text-amber-500" />,
-        confirmLabel: 'Continue to Final Step',
+        confirmLabel: t('reset_continue'),
         confirmClass: 'bg-amber-600 hover:bg-amber-700 text-white',
       }
 
   const step2Config = step2Action === 'reset'
     ? {
-        title: '🔒 Final Confirmation: Reset Data',
-        description: 'Type DELETE in the box below to permanently erase all data. This is your last chance to cancel.',
-        actionLabel: 'Delete All Data',
+        title: t('reset_step2_title'),
+        description: t('reset_step2_desc'),
+        actionLabel: t('reset_delete_all'),
         actionClass: 'bg-red-600 hover:bg-red-700 text-white',
       }
     : {
-        title: '🔒 Final Confirmation: Download Source',
-        description: 'Type DELETE in the box below to confirm source code download.',
-        actionLabel: 'Download Source Code',
+        title: t('source_step2_title'),
+        description: t('source_step2_desc'),
+        actionLabel: t('source_download'),
         actionClass: 'bg-amber-600 hover:bg-amber-700 text-white',
       }
 
@@ -285,7 +288,18 @@ export default function Home() {
                 <span className="font-medium text-gray-700">{adminName}</span>
               </div>
 
-              {/* Settings & Admin button - always visible */}
+              {/* Language Toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLang(lang === 'en' ? 'hi' : 'en')}
+                className="h-8 gap-1.5 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400"
+              >
+                <Languages className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{lang === 'en' ? 'हिन्दी' : 'English'}</span>
+              </Button>
+
+              {/* Settings & Admin button */}
               <Button
                 variant={showSettings ? 'default' : 'outline'}
                 size="sm"
@@ -297,10 +311,10 @@ export default function Home() {
                 }`}
               >
                 {showSettings ? <Building2 className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">{showSettings ? 'Close' : 'Admin'}</span>
+                <span className="hidden sm:inline">{showSettings ? t('header_close') : t('header_admin')}</span>
               </Button>
 
-              {/* Settings Dropdown - visible when in settings mode */}
+              {/* Settings Dropdown */}
               {showSettings && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -313,7 +327,7 @@ export default function Home() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">{t('header_actions')}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleExport}
@@ -321,7 +335,7 @@ export default function Home() {
                     className="gap-2 cursor-pointer"
                   >
                     <Download className={`h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
-                    <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
+                    <span>{exporting ? t('header_exporting') : t('header_export_excel')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleGenerateBills}
@@ -329,7 +343,7 @@ export default function Home() {
                     className="gap-2 cursor-pointer"
                   >
                     <FilePlus2 className={`h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
-                    <span>{generating ? 'Generating...' : 'Generate Bills'}</span>
+                    <span>{generating ? t('header_generating') : t('header_generate_bills')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -338,7 +352,7 @@ export default function Home() {
                     className="gap-2 cursor-pointer text-amber-700 dark:text-amber-400"
                   >
                     <Code2 className={`h-4 w-4 ${downloading ? 'animate-spin' : ''}`} />
-                    <span>{downloading ? 'Zipping...' : 'Source Code'}</span>
+                    <span>{downloading ? t('header_zipping') : t('header_source_code')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => openStep1('reset')}
@@ -347,7 +361,7 @@ export default function Home() {
                     className="gap-2 cursor-pointer"
                   >
                     <Database className={`h-4 w-4 ${seeding ? 'animate-spin' : ''}`} />
-                    <span>{seeding ? 'Resetting...' : 'Reset Data'}</span>
+                    <span>{seeding ? t('header_resetting') : t('header_reset_data')}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -355,20 +369,20 @@ export default function Home() {
                     className="gap-2 cursor-pointer text-red-600 dark:text-red-400"
                   >
                     <LogOut className="h-4 w-4" />
-                    <span>Logout</span>
+                    <span>{t('header_logout')}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               )}
 
-              {/* Logout button - visible when NOT in settings mode */}
+              {/* Logout button */}
               {!showSettings && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleLogout}
                   className="h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50"
-                  title="Logout"
+                  title={t('header_logout')}
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -391,7 +405,7 @@ export default function Home() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleStep1Continue}
               className={step1Config.confirmClass}
@@ -402,7 +416,7 @@ export default function Home() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Step 2 Confirmation Dialog with Input */}
+      {/* Step 2 Confirmation Dialog */}
       <Dialog open={step2Open} onOpenChange={(open) => {
         setStep2Open(open)
         if (!open) {
@@ -424,12 +438,12 @@ export default function Home() {
             <Input
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              placeholder='Type "DELETE" to confirm'
+              placeholder={t('reset_type_delete')}
               className="border-red-300 focus-visible:border-red-500 focus-visible:ring-red-500/30 font-mono text-center text-lg tracking-widest"
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground text-center">
-              This action cannot be undone
+              {t('reset_cannot_undo')}
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
@@ -441,7 +455,7 @@ export default function Home() {
                 setConfirmText('')
               }}
             >
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               onClick={handleStep2Confirm}
@@ -461,7 +475,7 @@ export default function Home() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                 <Settings className="h-5 w-5" />
-                <h2 className="text-lg font-bold">Settings & Admin</h2>
+                <h2 className="text-lg font-bold">{t('header_settings_admin')}</h2>
               </div>
               <AdminManager
                 token={localStorage.getItem('admin_token') || ''}
@@ -481,7 +495,7 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Fixed Bottom Navigation — always visible on all screen sizes */}
+      {/* Fixed Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-[9999] bg-white/95 dark:bg-gray-950/95 backdrop-blur-lg border-t border-emerald-200 dark:border-emerald-800 shadow-[0_-2px_16px_rgba(0,0,0,0.12)] will-change-transform" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <div className="flex items-center justify-around h-16 px-1 max-w-7xl mx-auto">
           {navItems.map((item) => {
@@ -500,7 +514,6 @@ export default function Home() {
                   }
                 `}
               >
-                {/* Active indicator line */}
                 {isActive && (
                   <span className="absolute top-0.5 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-emerald-600 dark:bg-emerald-400 rounded-full" />
                 )}
@@ -514,5 +527,13 @@ export default function Home() {
         </div>
       </nav>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   )
 }

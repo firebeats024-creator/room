@@ -6,7 +6,7 @@ import { getDateComponents } from '@/lib/billing-utils';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, phone, aadhaarNo, emergencyContact, occupation, workLocation, totalMembers, photoLink, roomId, checkInDate, openingMeterReading, ratePerUnit, securityDeposit } = body;
+    const { name, nameHindi, phone, aadhaarNo, emergencyContact, occupation, workLocation, totalMembers, photoLink, roomId, checkInDate, openingMeterReading, ratePerUnit, securityDeposit } = body;
 
     // Validate required fields
     if (!name || !roomId || !checkInDate) {
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       const guest = await tx.guest.create({
         data: {
           name,
+          nameHindi: nameHindi ?? '',
           phone: phone ?? '',
           aadhaarNo: aadhaarNo ?? '',
           emergencyContact: emergencyContact ?? '',
