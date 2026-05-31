@@ -61,6 +61,7 @@ interface GuestBill {
   paidAmount: number
   status: string
   rentAmount: number
+  maintenanceCharge: number
   electricityCharge: number
   billingMonth: number
   billingYear: number
@@ -113,6 +114,7 @@ interface GuestFull {
     type: string
     baseRent: number
     monthlyRent: number
+    maintenanceCharge: number
     status: string
   }
   securityDeposit: SecurityDeposit | null
@@ -677,23 +679,37 @@ export default function PgDashboard() {
 
             const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, nowLocalStr) : null
             const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
-            const totalPaid = guestDetail.bills.reduce((sum, b) => sum + (b.paidAmount || 0), 0)
-            const totalOutstanding = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
+
+            // ─── Accrual-based calculation (SAME as pg-billing.tsx) ───
+            // Bill-records-based: uses actual bill amounts (handles rent changes)
+            const billCount = guestDetail.bills.length
+            const unbilledMonths = Math.max(0, stayMonths - billCount)
+            const unbilledRent = unbilledMonths * monthlyRent
+            const unbilledMaintenance = unbilledMonths * (guestDetail.room.maintenanceCharge || 0)
+            const totalRentFromBills = guestDetail.bills.reduce((sum, b) => sum + b.rentAmount, 0)
+            const totalMaintenanceFromBills = guestDetail.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0)
+            const totalElectricity = guestDetail.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0)
+            const totalAdjustments = guestDetail.bills.reduce((sum, b) => sum + (b.manualAdjustment || 0), 0)
+            const totalAccruedRentCalc = totalRentFromBills + unbilledRent
+            const totalAccruedMaintenance = totalMaintenanceFromBills + unbilledMaintenance
+            const totalPaid = guestDetail.bills.reduce((sum, b) => {
+              if (b.status === 'Paid') return sum + b.totalAmount
+              return sum + (b.paidAmount || 0)
+            }, 0)
+            const dynamicTotalAccrued = totalAccruedRentCalc + totalAccruedMaintenance + totalElectricity + totalAdjustments
+            const totalOutstanding = Math.max(0, dynamicTotalAccrued - totalPaid)
+            const totalBalance = totalOutstanding
+
             const currentPeriodBill = currentPeriod
               ? guestDetail.bills.find((b) => b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
               : null
             const currentMonthBill = currentPeriodBill
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
-              : (currentPeriod ? monthlyRent : 0)
-            const previousDue = Math.max(0, totalOutstanding - currentMonthBill)
+              : (currentPeriod ? monthlyRent + (guestDetail.room.maintenanceCharge || 0) : 0)
+            const previousDue = Math.max(0, totalBalance - currentMonthBill)
 
-            // Calculate totalAccruedRent: sum of bill rentAmounts for billed months,
-            // plus current rent for the unbilled current period
-            const billedRentTotal = guestDetail.bills.reduce((sum, b) => sum + b.rentAmount, 0)
-            const hasCurrentBill = currentPeriodBill != null
-            const totalAccruedRent = hasCurrentBill
-              ? billedRentTotal
-              : billedRentTotal + monthlyRent
+            // Total Accrued Rent for display
+            const totalAccruedRent = totalAccruedRentCalc
 
             const lastElecReading = guestDetail.electricityReadings?.[0]
             const firstBill = guestDetail.bills[0] || null
@@ -825,7 +841,7 @@ export default function PgDashboard() {
                         {t('guest_live_billing_status')}
                       </h4>
                       <span className="text-[10px] text-gray-400">
-                        {daysStayed} {t('guest_days')} · {formatCurrency(totalAccruedRent)} {t('guest_total_accrued')}
+                        {daysStayed} {t('guest_days')} · {formatCurrency(dynamicTotalAccrued)} {t('guest_total_accrued')}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
@@ -942,6 +958,7 @@ export default function PgDashboard() {
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-gray-400">
                                 <span>{t('guest_rent')}: {formatCurrency(bill.rentAmount)}</span>
+                                {(bill.maintenanceCharge || 0) > 0 && <span>Maint: {formatCurrency(bill.maintenanceCharge)}</span>}
                                 {bill.electricityCharge > 0 && <span>{t('guest_elec')}: {formatCurrency(bill.electricityCharge)}</span>}
                                 <span>{t('guest_total')}: {formatCurrency(bill.totalAmount)}</span>
                               </div>

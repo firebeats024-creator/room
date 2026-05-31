@@ -1348,14 +1348,25 @@ export default function PgGuests() {
             const stayMonths = isLive ? calculateStayMonths(detailsGuest.checkInDate, nowLocalStr) : 0;
             const stayRemainingDays = isLive ? remainingDaysAfterMonths(detailsGuest.checkInDate, stayMonths, nowLocalStr) : 0;
             const monthlyRent = detailsGuest.room.monthlyRent;
-            const totalAccruedRent = stayMonths * monthlyRent;
+
+            // ─── Bill-records-based calculation (handles rent changes correctly) ───
+            const billCount = detailsGuest.bills.length;
+            const unbilledMonths = Math.max(0, stayMonths - billCount);
+            const unbilledRent = unbilledMonths * monthlyRent;
+            const unbilledMaintenance = unbilledMonths * (detailsGuest.room.maintenanceCharge || 0);
+            const totalRentFromBills = detailsGuest.bills.reduce((sum, b) => sum + b.rentAmount, 0);
+            const totalMaintenanceFromBills = detailsGuest.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0);
+            const totalElectricity = detailsGuest.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0);
+            const totalAccruedRent = totalRentFromBills + unbilledRent;
+            const totalAccruedMaintenance = totalMaintenanceFromBills + unbilledMaintenance;
+            const dynamicTotalAccrued = totalAccruedRent + totalAccruedMaintenance + totalElectricity;
 
             // Total paid: Paid bills (full) + partially-paid/overdue (paidAmount portion)
             const totalPaid = detailsGuest.bills.reduce((sum, b) =>
               sum + (b.status === 'Paid' ? b.totalAmount : (b.paidAmount || 0)), 0);
 
-            // Total balance = accrued rent - what's been paid
-            const totalBalance = Math.max(0, totalAccruedRent - totalPaid);
+            // Total balance = total accrued - what's been paid
+            const totalBalance = Math.max(0, dynamicTotalAccrued - totalPaid);
 
             // Current period billing
             const currentPeriod = isLive ? getCurrentBillingPeriod(detailsGuest.checkInDate, nowLocalStr) : null;
@@ -1368,7 +1379,7 @@ export default function PgGuests() {
             // Current month bill = what's still owed for the current period
             const currentMonthBill = currentPeriodBill
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
-              : (currentPeriod ? monthlyRent : 0);
+              : (currentPeriod ? monthlyRent + (detailsGuest.room.maintenanceCharge || 0) : 0);
 
             // Previous due = total outstanding minus current month's portion
             const previousDue = Math.max(0, totalBalance - currentMonthBill);

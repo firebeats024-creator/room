@@ -40,6 +40,7 @@ interface Bill {
   billingMonth: number;
   billingYear: number;
   rentAmount: number;
+  maintenanceCharge: number;
   electricityCharge: number;
   previousReading: number;
   currentReading: number;
@@ -73,6 +74,7 @@ interface Bill {
     floor: number;
     type: string;
     monthlyRent: number;
+    maintenanceCharge: number;
   };
 }
 
@@ -119,7 +121,7 @@ function getOrdinalSuffix(n: number): string {
 //   15/03 → 15/04 = 1 Month, 16/04 = 2 Months, 15/05 = 2 Months, 16/05 = 3 Months
 //
 // 1. MONTH COUNTING: calculateStayMonths() — uses UTC methods
-// 2. RENT ALLOCATION: Total Accrued Rent = stayMonths × monthlyRent
+// 2. RENT ALLOCATION: Total Accrued = Sum of rent from bill records + unbilled months × currentRent
 // 3. CURRENT/PREVIOUS SPLIT: getCurrentBillingPeriod() — uses UTC methods
 // 4. PAYMENT PRIORITY: Current Bill → Previous Due (FIFO)
 // =====================================================================
@@ -134,6 +136,7 @@ interface GuestBucketInfo {
   checkInDate: string;
   checkOutDate: string | null;
   monthlyRent: number;
+  maintenanceCharge: number;
   totalBilled: number;
   totalPaid: number;
   totalDue: number;
@@ -141,11 +144,16 @@ interface GuestBucketInfo {
   paidCount: number;
   daysStayed: number;
   stayMonths: number;
-  totalAccruedRent: number;         // stayMonths × monthlyRent
+  totalAccruedRent: number;         // Sum of rent from all bills + unbilled months × current rent
+  // Bill-record-based component totals:
+  totalRentFromBills: number;
+  totalMaintenanceFromBills: number;
+  totalElectricityFromBills: number;
+  totalAdjustmentsFromBills: number;
   // Dynamic accrual-based amounts (adjusted for payments):
-  currentBillAmount: number;        // Monthly Rent - payments allocated to current
-  previousDue: number;              // (stayMonths-1) × Rent - payments allocated to previous
-  totalBalance: number;             // currentBillAmount + previousDue
+  currentBillAmount: number;        // Current period bill remaining
+  previousDue: number;              // Total Balance - Current Bill
+  totalBalance: number;             // Total Accrued - Total Paid
   currentBillMonth: number;
   currentBillYear: number;
   dueBills: {
@@ -155,6 +163,17 @@ interface GuestBucketInfo {
     cycleDate: number;
     isCurrentBill: boolean;
   }[];
+  accruedBreakdown?: {
+    rent: number;
+    maintenance: number;
+    electricity: number;
+    adjustments: number;
+    unbilledRent: number;
+    unbilledMaintenance: number;
+    totalAccrued: number;
+    totalPaid: number;
+    totalDue: number;
+  };
 }
 
 // ---------- Component ----------
@@ -257,6 +276,7 @@ export default function PgBilling() {
         checkInDate: bill.guest.checkInDate,
         checkOutDate: bill.guest.checkOutDate,
         monthlyRent: bill.room.monthlyRent || bill.rentAmount,
+        maintenanceCharge: bill.room.maintenanceCharge || 0,
         totalBilled: 0,
         totalPaid: 0,
         totalDue: 0,
@@ -265,6 +285,10 @@ export default function PgBilling() {
         daysStayed: 0,
         stayMonths: 0,
         totalAccruedRent: 0,
+        totalRentFromBills: 0,
+        totalMaintenanceFromBills: 0,
+        totalElectricityFromBills: 0,
+        totalAdjustmentsFromBills: 0,
         currentBillAmount: 0,
         previousDue: 0,
         totalBalance: 0,
@@ -274,6 +298,10 @@ export default function PgBilling() {
       };
     }
     acc[key].totalBilled += bill.totalAmount;
+    acc[key].totalRentFromBills += bill.rentAmount;
+    acc[key].totalMaintenanceFromBills += bill.maintenanceCharge || 0;
+    acc[key].totalElectricityFromBills += bill.electricityCharge || 0;
+    acc[key].totalAdjustmentsFromBills += bill.manualAdjustment || 0;
     acc[key].billCount++;
     if (bill.status === 'Paid') {
       acc[key].totalPaid += bill.totalAmount;
@@ -296,11 +324,15 @@ export default function PgBilling() {
   }, {} as Record<string, GuestBucketInfo>);
 
   // =====================================================================
-  // DYNAMIC RENTAL BILLING: Accrual-based calculation
+  // DYNAMIC RENTAL BILLING: Bill-Records-Based Calculation
   // =====================================================================
-  // Source of truth: stayMonths × monthlyRent = Total Accrued Rent
-  // Total Balance = Total Accrued Rent - Total Paid (from bill records)
-  // Current Bill = remaining on current period's bill (or monthlyRent if no bill)
+  // Source of truth: ACTUAL bill records capture correct rent per month
+  //   (rent may change over time — bills record the rent at billing time)
+  // Total Accrued = (Rent from bills + Unbilled rent) + (Maint from bills + Unbilled maint)
+  //                 + Electricity from bills + Adjustments from bills
+  // Unbilled months = stayMonths - billCount (months without a bill yet)
+  // Total Balance = Total Accrued - Total Paid
+  // Current Bill = remaining on current period's bill (or monthlyRent + maint if no bill)
   // Previous Due = Total Balance - Current Bill
   // =====================================================================
   for (const key of Object.keys(guestSummary)) {
@@ -311,9 +343,6 @@ export default function PgBilling() {
       : liveDate; // Already a local-time YYYY-MM-DD string
     gs.daysStayed = daysBetween(gs.checkInDate, referenceDate);
     gs.stayMonths = calculateStayMonths(gs.checkInDate, referenceDate);
-
-    // Total Accrued Rent = Stay Months × Monthly Rent
-    gs.totalAccruedRent = gs.stayMonths * gs.monthlyRent;
 
     // Determine current billing period
     // For checked-out guests, use checkOutDate as reference; for live guests, use liveDate
@@ -348,26 +377,56 @@ export default function PgBilling() {
       }
     }
 
-    // Dynamic accrual-based amounts
-    // Total Accrued Rent is the source of truth for what the guest owes
-    // Payments from bill records tell us what's been paid
-    // Split: use bill records for Current Bill (if bill exists), derive Previous Due
-    const dynamicTotalAccrued = gs.totalAccruedRent;
+    // =====================================================================
+    // BILL-RECORDS-BASED CALCULATION (handles rent changes correctly)
+    // =====================================================================
+    // Each bill already has the correct rentAmount and maintenanceCharge
+    // for its billing period (captured at bill creation time).
+    // So summing from bill records gives the accurate total.
+    // For months without a bill yet (unbilled), add current room rates.
+    // =====================================================================
+    const unbilledMonths = Math.max(0, gs.stayMonths - gs.billCount);
+    const unbilledRent = unbilledMonths * gs.monthlyRent;
+    const unbilledMaintenance = unbilledMonths * gs.maintenanceCharge;
+
+    // Total Accrued = from bill records + unbilled months
+    const totalAccruedRent = gs.totalRentFromBills + unbilledRent;
+    const totalAccruedMaintenance = gs.totalMaintenanceFromBills + unbilledMaintenance;
+    const totalAccruedElectricity = gs.totalElectricityFromBills;
+    const totalAccruedAdjustments = gs.totalAdjustmentsFromBills;
+
+    gs.totalAccruedRent = totalAccruedRent;
+
+    const dynamicTotalAccrued = totalAccruedRent + totalAccruedMaintenance + totalAccruedElectricity + totalAccruedAdjustments;
     const totalPaid = gs.totalPaid; // From bill records
     const totalBalance = Math.max(0, dynamicTotalAccrued - totalPaid);
 
+    // Store breakdown for step-by-step display
+    gs.accruedBreakdown = {
+      rent: totalAccruedRent,
+      maintenance: totalAccruedMaintenance,
+      electricity: totalAccruedElectricity,
+      adjustments: totalAccruedAdjustments,
+      unbilledRent,
+      unbilledMaintenance,
+      totalAccrued: dynamicTotalAccrued,
+      totalPaid: totalPaid,
+      totalDue: totalBalance,
+    };
+
     // For Current Bill: check if the current period has a bill record
     // If yes, use the remaining amount on that specific bill
-    // If no bill exists for current period, the full month's rent is still owed
+    // If no bill exists for current period, the full month's rent + maintenance is still owed
     const currentPeriodBill = gs.dueBills.find(db => db.isCurrentBill);
     if (currentPeriodBill) {
       gs.currentBillAmount = currentPeriodBill.amount; // Remaining on current bill
     } else if (gs.dueBills.length === 0) {
       // All bills are paid — check if totalPaid covers the current month too
-      gs.currentBillAmount = Math.max(0, gs.monthlyRent - Math.max(0, totalPaid - (dynamicTotalAccrued - gs.monthlyRent)));
+      const currentMonthCharge = gs.monthlyRent + gs.maintenanceCharge;
+      gs.currentBillAmount = Math.max(0, currentMonthCharge - Math.max(0, totalPaid - (dynamicTotalAccrued - currentMonthCharge)));
     } else {
       // No bill for current period but other due bills exist — current month is still owed
-      gs.currentBillAmount = gs.monthlyRent;
+      gs.currentBillAmount = gs.monthlyRent + gs.maintenanceCharge;
     }
 
     // Previous Due = Total Balance - Current Bill
@@ -380,6 +439,7 @@ export default function PgBilling() {
   // Per-guest bucket lookup (for table columns)
   const guestBucketMap: Record<string, {
     monthlyRent: number;
+    maintenanceCharge: number;
     stayMonths: number;
     daysStayed: number;
     totalAccruedRent: number;
@@ -393,6 +453,7 @@ export default function PgBilling() {
   for (const gs of guestSummaryList) {
     guestBucketMap[gs.guestId] = {
       monthlyRent: gs.monthlyRent,
+      maintenanceCharge: gs.maintenanceCharge,
       stayMonths: gs.stayMonths,
       daysStayed: gs.daysStayed,
       totalAccruedRent: gs.totalAccruedRent,
@@ -447,7 +508,7 @@ export default function PgBilling() {
   const editElectricityCharge = editUnitsConsumed * (parseFloat(editRatePerUnit) || 0);
 
   const calculatedTotal = editBill
-    ? editBill.rentAmount + editElectricityCharge + (parseFloat(manualAdjustment) || 0)
+    ? editBill.rentAmount + (editBill.maintenanceCharge || 0) + editElectricityCharge + (parseFloat(manualAdjustment) || 0)
     : 0;
 
   const previewTotal = isCustomBill
@@ -518,7 +579,7 @@ export default function PgBilling() {
   const payElectricityCharge = payUnitsConsumed * (parseFloat(payRatePerUnit) || 0);
 
   const payCalculatedTotal = confirmPaidBill
-    ? confirmPaidBill.rentAmount + payElectricityCharge + (parseFloat(payManualAdjustment) || 0)
+    ? confirmPaidBill.rentAmount + (confirmPaidBill.maintenanceCharge || 0) + payElectricityCharge + (parseFloat(payManualAdjustment) || 0)
     : 0;
 
   const payPreviewTotal = payIsCustomBill
@@ -537,7 +598,7 @@ export default function PgBilling() {
       if (payIsCustomBill) {
         newTotal = parseFloat(payCustomTotal) || 0;
       } else {
-        newTotal = confirmPaidBill.rentAmount + pElectricityCharge + (parseFloat(payManualAdjustment) || 0);
+        newTotal = confirmPaidBill.rentAmount + (confirmPaidBill.maintenanceCharge || 0) + pElectricityCharge + (parseFloat(payManualAdjustment) || 0);
       }
 
       const paymentAmt = parseFloat(payAmount) || 0;
@@ -653,10 +714,12 @@ export default function PgBilling() {
         let aggregateCurrentBill = 0;
         let aggregatePreviousDue = 0;
         let aggregateAccruedRent = 0;
+        let aggregateTotalAccrued = 0;
         for (const gs of guestSummaryList) {
           aggregateCurrentBill += gs.currentBillAmount;
           aggregatePreviousDue += gs.previousDue;
           aggregateAccruedRent += gs.totalAccruedRent;
+          aggregateTotalAccrued += gs.accruedBreakdown?.totalAccrued || gs.totalAccruedRent;
         }
         const aggregateTotalBalance = aggregateCurrentBill + aggregatePreviousDue;
 
@@ -671,8 +734,13 @@ export default function PgBilling() {
                   <div>
                     <p className="text-xs text-muted-foreground">{t('billing_total_billed')}</p>
                     <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
-                      {formatCurrency(totalBilled)}
+                      {formatCurrency(aggregateTotalAccrued)}
                     </p>
+                    {aggregateTotalAccrued !== aggregateAccruedRent && (
+                      <p className="text-[9px] text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
+                        Rent: {formatCurrency(aggregateAccruedRent)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -874,12 +942,27 @@ export default function PgBilling() {
                       <TableCell className="text-center">
                         <div className="inline-flex flex-col items-center">
                           <Badge className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">
-                            {gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''} × {formatCurrency(gs.monthlyRent)}
+                            {gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''}
                           </Badge>
-                          <span className="text-[9px] text-muted-foreground mt-0.5">= {formatCurrency(gs.totalAccruedRent)}</span>
+                          <span className="text-[9px] text-muted-foreground mt-0.5">Rent = {formatCurrency(gs.totalAccruedRent)}</span>
+                          {gs.accruedBreakdown && (gs.accruedBreakdown.maintenance > 0 || gs.accruedBreakdown.electricity > 0) && (
+                            <span className="text-[9px] text-amber-700 dark:text-amber-400">
+                              {gs.accruedBreakdown.maintenance > 0 && `+ Maint: ${formatCurrency(gs.accruedBreakdown.maintenance)}`}
+                              {gs.accruedBreakdown.electricity > 0 && ` + Elec: ${formatCurrency(gs.accruedBreakdown.electricity)}`}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-sm">{formatCurrency(gs.totalAccruedRent)}</TableCell>
+                      <TableCell className="text-right font-semibold text-sm">
+                        <div className="inline-flex flex-col items-end">
+                          <span>{formatCurrency(gs.totalAccruedRent)}</span>
+                          {gs.accruedBreakdown && (gs.accruedBreakdown.maintenance > 0 || gs.accruedBreakdown.electricity > 0) && (
+                            <span className="text-[9px] text-amber-600 dark:text-amber-400">
+                              Total: {formatCurrency(gs.accruedBreakdown.totalAccrued)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right font-semibold text-sm text-emerald-700 dark:text-emerald-400">{formatCurrency(gs.totalPaid)}</TableCell>
                       <TableCell className="text-right bg-red-50/40 dark:bg-red-950/15">
                         <div className="inline-flex flex-col items-end">
@@ -929,20 +1012,91 @@ export default function PgBilling() {
                       </span>
                     </div>
                   </div>
-                  {/* Calculation formula bar */}
-                  <div className="flex items-center gap-2 rounded bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 px-2 py-1 mb-2 text-xs">
-                    <Calculator className="h-3 w-3 text-emerald-500" />
-                    <span className="text-emerald-800 dark:text-emerald-300 font-medium">
-                      {gs.stayMonths} {t('billing_months')} × {formatCurrency(gs.monthlyRent)} = {formatCurrency(gs.totalAccruedRent)}
-                    </span>
-                    <span className="text-muted-foreground ml-2">|</span>
-                    <span className="text-muted-foreground ml-2">{t('billing_check_in')}: <span className="font-semibold text-foreground">{formatDate(gs.checkInDate)}</span></span>
-                    <span className="text-muted-foreground ml-2">| {t('billing_calculation')}: <span className="font-semibold text-foreground">{gs.billingCycleDate}{getOrdinalSuffix(gs.billingCycleDate)}</span></span>
-                    <span className="text-muted-foreground ml-2">| {gs.guestStatus === 'Checked-out' ? (
-                      <>{t('guest_checked_out')}: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(gs.checkOutDate)}</span></>
-                    ) : (
-                      <>{t('billing_live')}: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
-                    )}</span>
+                  {/* Step-by-step Calculation */}
+                  <div className="rounded bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 px-3 py-2 mb-2 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Calculator className="h-3.5 w-3.5 text-emerald-500" />
+                      <span className="font-semibold text-emerald-800 dark:text-emerald-300">Step-by-Step Calculation</span>
+                    </div>
+                    {(() => {
+                      const bd = gs.accruedBreakdown;
+                      if (!bd) return null;
+                      return (
+                        <div className="space-y-0.5 font-mono text-[11px]">
+                          {/* Step 1: Rent from bills */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground w-5">1.</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">Rent (bills):</span>
+                            <span className="text-foreground">{gs.billCount} bills = <span className="font-semibold">{formatCurrency(gs.totalRentFromBills)}</span></span>
+                          </div>
+                          {/* Unbilled rent */}
+                          {(bd.unbilledRent || 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5"></span>
+                              <span className="text-emerald-600/70 dark:text-emerald-400/70">+ Unbilled:</span>
+                              <span className="text-foreground">{Math.max(0, gs.stayMonths - gs.billCount)} months × {formatCurrency(gs.monthlyRent)} = <span className="font-semibold">{formatCurrency(bd.unbilledRent || 0)}</span></span>
+                            </div>
+                          )}
+                          {/* Step 2: Maintenance from bills */}
+                          {bd.maintenance > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5">2.</span>
+                              <span className="text-amber-700 dark:text-amber-400">Maintenance:</span>
+                              <span className="text-foreground">{gs.billCount} bills = {formatCurrency(gs.totalMaintenanceFromBills)}{(bd.unbilledMaintenance || 0) > 0 ? ` + ${Math.max(0, gs.stayMonths - gs.billCount)} × ${formatCurrency(gs.maintenanceCharge)} = ` : ' = '}<span className="font-semibold">{formatCurrency(bd.maintenance)}</span></span>
+                            </div>
+                          )}
+                          {/* Step 3: Electricity */}
+                          {bd.electricity > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5">{bd.maintenance > 0 ? '3' : '2'}.</span>
+                              <span className="text-yellow-600 dark:text-yellow-400">Electricity:</span>
+                              <span className="text-foreground">+ {formatCurrency(bd.electricity)}</span>
+                            </div>
+                          )}
+                          {/* Step 4: Adjustments */}
+                          {bd.adjustments !== 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5">
+                                {(bd.maintenance > 0 ? 1 : 0) + (bd.electricity > 0 ? 1 : 0) + 2}.
+                              </span>
+                              <span className="text-purple-700 dark:text-purple-400">Adjustment:</span>
+                              <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {formatCurrency(bd.adjustments)}</span>
+                            </div>
+                          )}
+                          {/* Total Accrued */}
+                          <div className="flex items-center gap-1 pt-0.5 border-t border-dashed border-emerald-200 dark:border-emerald-800 mt-0.5">
+                            <span className="text-muted-foreground w-5"></span>
+                            <span className="text-emerald-800 dark:text-emerald-300 font-semibold">Total Accrued:</span>
+                            <span className="text-foreground font-semibold">{formatCurrency(bd.totalAccrued)}</span>
+                          </div>
+                          {/* Step: Minus Paid */}
+                          {bd.totalPaid > 0 && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5"></span>
+                              <span className="text-teal-700 dark:text-teal-400">Minus Paid:</span>
+                              <span className="text-foreground">- {formatCurrency(bd.totalPaid)}</span>
+                            </div>
+                          )}
+                          {/* Final Total Due */}
+                          <div className="flex items-center gap-1 pt-0.5 border-t-2 border-red-300 dark:border-red-700 mt-0.5">
+                            <span className="text-muted-foreground w-5"></span>
+                            <span className="text-red-800 dark:text-red-300 font-bold">Total Due:</span>
+                            <span className="text-red-800 dark:text-red-300 font-extrabold text-sm">{formatCurrency(bd.totalDue)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                      <span>{t('billing_check_in')}: <span className="font-semibold text-foreground">{formatDate(gs.checkInDate)}</span></span>
+                      <span>|</span>
+                      <span>{t('billing_calculation')}: <span className="font-semibold text-foreground">{gs.billingCycleDate}{getOrdinalSuffix(gs.billingCycleDate)}</span></span>
+                      <span>|</span>
+                      <span>{gs.guestStatus === 'Checked-out' ? (
+                        <>{t('guest_checked_out')}: <span className="font-semibold text-amber-700 dark:text-amber-400">{formatDate(gs.checkOutDate)}</span></>
+                      ) : (
+                        <>{t('billing_live')}: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{liveDateStr}</span></>
+                      )}</span>
+                    </div>
                   </div>
                   {/* Current Bill / Previous Due / Total Balance bucket bar */}
                   <div className="grid grid-cols-3 gap-2 mb-2">
@@ -1054,6 +1208,7 @@ export default function PgBilling() {
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t('billing_room')}</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200">{t("billing_current_bill_col")}</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Rent</TableHead>
+                    <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-right">Maint.</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Opening</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Ending</TableHead>
                     <TableHead className="font-semibold text-emerald-800 dark:text-emerald-200 text-center">Units</TableHead>
@@ -1111,6 +1266,7 @@ export default function PgBilling() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right text-sm">{formatCurrency(bill.rentAmount)}</TableCell>
+                        <TableCell className="text-right text-sm">{(bill.maintenanceCharge || 0) > 0 ? formatCurrency(bill.maintenanceCharge) : '—'}</TableCell>
                         <TableCell className="text-center text-sm font-mono">
                           <span className="inline-flex items-center gap-1">
                             <Zap className="h-3 w-3 text-amber-500" />
@@ -1146,8 +1302,15 @@ export default function PgBilling() {
                         <TableCell className="text-center">
                           <div className="inline-flex flex-col items-center">
                             <Badge className="text-[9px] bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800 px-1.5">
-                              {stayMonths}m × {formatCurrency(monthlyRent)}
+                              {stayMonths}m
                             </Badge>
+                            {!isPaid && (
+                              <span className="text-[9px] text-muted-foreground mt-0.5">
+                                {formatCurrency(bill.rentAmount)}
+                                {(bill.maintenanceCharge || 0) > 0 && ` + ${formatCurrency(bill.maintenanceCharge)}M`}
+                                {(bill.electricityCharge || 0) > 0 && ` + ${formatCurrency(bill.electricityCharge)}E`}
+                              </span>
+                            )}
                           </div>
                         </TableCell>
                         {/* Adjusted Current Bill Column */}
@@ -1276,13 +1439,18 @@ export default function PgBilling() {
                     </div>
                   </div>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">{t('guest_rent')}</span>
                       <p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(confirmPaidBill.rentAmount)}</p>
                     </div>
                     <div>
+                      <span className="text-muted-foreground">Maintenance</span>
+                      <p className="font-semibold text-orange-700 dark:text-orange-400">{(confirmPaidBill.maintenanceCharge || 0) > 0 ? formatCurrency(confirmPaidBill.maintenanceCharge) : '—'}</p>
+                    </div>
+                    <div>
                       <span className="text-muted-foreground">{t('guest_electricity')}</span>
+                      <p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(confirmPaidBill.electricityCharge)}</p>
                     </div>
                     {(confirmPaidBill.paidAmount || 0) > 0 && (
                       <div>
@@ -1411,12 +1579,58 @@ export default function PgBilling() {
                           </div>
                         </div>
 
-                        {/* Formula display */}
-                        <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
-                          <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
-                            {stayMonths} {t('billing_months')} × {formatCurrency(monthlyRent)} = {formatCurrency(totalAccruedRent)} {t('billing_accrued_rent').toLowerCase()}
-                          </span>
-                        </div>
+                        {/* Formula display - Step by step */}
+                        {(() => {
+                          const guestGs = guestSummaryList.find(g => g.guestId === confirmPaidBill.guestId);
+                          const bd = guestGs?.accruedBreakdown;
+                          if (!bd) return (
+                            <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
+                              <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+                                {formatCurrency(totalAccruedRent)} {t('billing_accrued_rent').toLowerCase()}
+                              </span>
+                            </div>
+                          );
+                          return (
+                            <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-xs space-y-0.5 font-mono">
+                              <div className="flex items-center gap-1">
+                                <span className="text-emerald-700 dark:text-emerald-400">Rent:</span>
+                                <span className="text-foreground">{formatCurrency(bd.rent)} (from bills)</span>
+                              </div>
+                              {bd.maintenance > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-amber-700 dark:text-amber-400">Maintenance:</span>
+                                  <span className="text-foreground">+ {formatCurrency(bd.maintenance)}</span>
+                                </div>
+                              )}
+                              {bd.electricity > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-yellow-600 dark:text-yellow-400">Electricity:</span>
+                                  <span className="text-foreground">+ {formatCurrency(bd.electricity)}</span>
+                                </div>
+                              )}
+                              {bd.adjustments !== 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-purple-700 dark:text-purple-400">Adjustment:</span>
+                                  <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {formatCurrency(bd.adjustments)}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1 pt-0.5 border-t border-dashed border-emerald-200 dark:border-emerald-800">
+                                <span className="text-emerald-800 dark:text-emerald-300 font-semibold">Total Accrued:</span>
+                                <span className="text-foreground font-semibold">{formatCurrency(bd.totalAccrued)}</span>
+                              </div>
+                              {bd.totalPaid > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-teal-700 dark:text-teal-400">Minus Paid:</span>
+                                  <span className="text-foreground">- {formatCurrency(bd.totalPaid)}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1 pt-0.5 border-t-2 border-red-300 dark:border-red-700">
+                                <span className="text-red-800 dark:text-red-300 font-bold">Total Due:</span>
+                                <span className="text-red-800 dark:text-red-300 font-extrabold">{formatCurrency(bd.totalDue)}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         <div className="grid grid-cols-3 gap-3">
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900 p-2">
@@ -1429,7 +1643,7 @@ export default function PgBilling() {
                           </div>
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900 p-2">
                             <p className="text-[10px] text-muted-foreground">{t('billing_total_paid')}</p>
-                            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(totalAccruedRent - totalBalanceNow)}</p>
+                            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(guestSummaryList.find(g => g.guestId === confirmPaidBill.guestId)?.accruedBreakdown?.totalPaid ?? (totalAccruedRent - totalBalanceNow))}</p>
                           </div>
                         </div>
                         <div className="flex items-center justify-between bg-red-100 dark:bg-red-950/50 rounded-md p-2 border border-red-200 dark:border-red-800">
@@ -1569,8 +1783,9 @@ export default function PgBilling() {
                     <div><span className="text-muted-foreground">{t("billing_overdue_tab")}</span><p><StatusBadge status={editBill.status} /></p></div>
                   </div>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2 text-sm">
                     <div><span className="text-muted-foreground">Rent Amount</span><p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(editBill.rentAmount)}</p></div>
+                    <div><span className="text-muted-foreground">Maintenance</span><p className="font-semibold text-orange-700 dark:text-orange-400">{(editBill.maintenanceCharge || 0) > 0 ? formatCurrency(editBill.maintenanceCharge) : '—'}</p></div>
                     <div><span className="text-muted-foreground">{t("guest_electricity")}</span><p className="font-semibold text-emerald-700 dark:text-emerald-400">{formatCurrency(editBill.electricityCharge)}</p></div>
                   </div>
                 </CardContent>
@@ -1652,7 +1867,7 @@ export default function PgBilling() {
                   </div>
                   {!isCustomBill && (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      {t("guest_rent")} {formatCurrency(editBill.rentAmount)} + {t("guest_electricity")} {formatCurrency(editElectricityCharge)}
+                      {t("guest_rent")} {formatCurrency(editBill.rentAmount)}{(editBill.maintenanceCharge || 0) > 0 && ` + Maint ${formatCurrency(editBill.maintenanceCharge)}`} + {t("guest_electricity")} {formatCurrency(editElectricityCharge)}
                       {parseFloat(manualAdjustment) ? ` + Adj ${formatCurrency(parseFloat(manualAdjustment))}` : ''}
                     </div>
                   )}

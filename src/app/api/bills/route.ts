@@ -45,6 +45,7 @@ export async function GET() {
           select: {
             id: true,
             name: true,
+            nameHindi: true,
             phone: true,
             status: true,
             billingCycleDate: true,
@@ -59,6 +60,7 @@ export async function GET() {
             floor: true,
             type: true,
             monthlyRent: true,
+            maintenanceCharge: true,
           },
         },
       },
@@ -161,13 +163,15 @@ export async function PUT(request: Request) {
         // Manager override: use custom total
         totalAmount = customTotal;
       } else {
-        // Standard calculation: rent + electricity + manual adjustment
+        // Standard calculation: rent + maintenance + electricity + manual adjustment
         const effectiveElectricityCharge = electricityCharge !== undefined && electricityCharge !== null
           ? electricityCharge
           : existingBill.electricityCharge;
         const effectiveAdjustment = manualAdjustment ?? existingBill.manualAdjustment;
+        const effectiveMaintenanceCharge = existingBill.maintenanceCharge || 0;
         totalAmount =
           existingBill.rentAmount +
+          effectiveMaintenanceCharge +
           effectiveElectricityCharge +
           effectiveAdjustment;
       }
@@ -203,7 +207,8 @@ export async function PUT(request: Request) {
         newTotalAmount = customTotal;
       } else {
         const effectiveAdjustment = manualAdjustment ?? existingBill.manualAdjustment;
-        newTotalAmount = existingBill.rentAmount + effectiveElectricityCharge + effectiveAdjustment;
+        const effectiveMaintenanceCharge = existingBill.maintenanceCharge || 0;
+        newTotalAmount = existingBill.rentAmount + effectiveMaintenanceCharge + effectiveElectricityCharge + effectiveAdjustment;
       }
 
       updateData.totalAmount = newTotalAmount;

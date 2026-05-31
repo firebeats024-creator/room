@@ -42,7 +42,29 @@ export async function POST() {
 
     let billsCreated = 0;
     let overdueMarked = 0;
+    let maintenanceBackfilled = 0;
     const createdBills: { guestName: string; month: number; year: number; amount: number }[] = [];
+
+    // ─── BACKFILL: Fix existing bills where maintenanceCharge=0 but room has maintenance > 0 ───
+    // This happens when room maintenance was set after bills were generated
+    const allBillsWithRoom = await db.bill.findMany({
+      where: { maintenanceCharge: 0 },
+      include: { room: { select: { maintenanceCharge: true } } },
+    });
+    const billsNeedingMaintFix = allBillsWithRoom.filter(b => b.room.maintenanceCharge > 0);
+    for (const bill of billsNeedingMaintFix) {
+      const roomMaint = bill.room.maintenanceCharge;
+      // Recalculate totalAmount: rent + maintenance + electricity + adjustments
+      const newTotal = bill.rentAmount + roomMaint + bill.electricityCharge + bill.manualAdjustment;
+      await db.bill.update({
+        where: { id: bill.id },
+        data: {
+          maintenanceCharge: roomMaint,
+          totalAmount: bill.isCustomBill ? bill.totalAmount : newTotal,
+        },
+      });
+      maintenanceBackfilled++;
+    }
 
     for (const guest of liveGuests) {
       // Timezone-safe date parsing for check-in date
@@ -140,6 +162,7 @@ export async function POST() {
 
           // ─── RENT-AWARE: Use the correct rent for this billing period ───
           const rentForThisPeriod = getRentForPeriod(iterMonth, iterYear);
+          const maintenanceChargeForPeriod = guest.room.maintenanceCharge || 0;
 
           // Create the missing bill
           const newBill = await db.bill.create({
@@ -149,6 +172,7 @@ export async function POST() {
               billingMonth: iterMonth,
               billingYear: iterYear,
               rentAmount: rentForThisPeriod,
+              maintenanceCharge: maintenanceChargeForPeriod,
               electricityCharge: 0,
               previousReading: openingReading,
               currentReading: openingReading, // same as previous until a new reading is taken
@@ -158,7 +182,7 @@ export async function POST() {
               manualAdjustment: 0,
               adjustmentReason: '',
               isCustomBill: false,
-              totalAmount: rentForThisPeriod,
+              totalAmount: rentForThisPeriod + maintenanceChargeForPeriod,
               dueDate,
               status: 'Unpaid',
             },
@@ -209,9 +233,10 @@ export async function POST() {
     }
 
     return NextResponse.json({
-      message: `Generated ${billsCreated} new bills, marked ${overdueMarked} as overdue`,
+      message: `Generated ${billsCreated} new bills, marked ${overdueMarked} as overdue, backfilled maintenance on ${maintenanceBackfilled} bills`,
       billsCreated,
       overdueMarked,
+      maintenanceBackfilled,
       createdBills,
     });
   } catch (error) {

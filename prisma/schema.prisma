@@ -15,6 +15,7 @@ model Room {
   type      String   @default("Single") // Single, Double, Triple
   baseRent  Float    @default(5000) // Room's default rent — resets to this on checkout
   monthlyRent Float   @default(5000) // Current active rent — can be changed via rent update for current guest
+  maintenanceCharge Float @default(0) // Monthly maintenance charge for this room
   status    String   @default("Vacant") // Vacant, Occupied, Maintenance
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,6 +84,7 @@ model Bill {
   billingMonth     Int      // 1-12
   billingYear      Int      // e.g., 2025
   rentAmount       Float
+  maintenanceCharge Float   @default(0) // Monthly maintenance charge at the time of billing
   electricityCharge Float   @default(0)
   previousReading  Float   @default(0)
   currentReading   Float   @default(0)

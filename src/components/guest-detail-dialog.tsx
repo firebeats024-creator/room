@@ -41,6 +41,7 @@ import {
   X,
   Home,
   MapPin,
+  Calculator,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/i18n'
@@ -59,6 +60,7 @@ interface GuestBill {
   paidAmount: number
   status: string
   rentAmount: number
+  maintenanceCharge: number
   electricityCharge: number
   billingMonth: number
   billingYear: number
@@ -110,6 +112,7 @@ interface GuestFull {
     floor: number
     type: string
     monthlyRent: number
+    maintenanceCharge: number
     status: string
   }
   securityDeposit: SecurityDeposit | null
@@ -427,7 +430,7 @@ export default function GuestDetailDialog({
               <Skeleton className="h-48 w-full" />
             </div>
           ) : guestDetail ? (() => {
-            // ─── Billing calculations ───
+            // ─── Billing calculations (ACCRUAL-BASED — same as billing page) ───
             const isLive = guestDetail.status === 'Live'
             const nowLocal = new Date()
             const nowLocalStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`
@@ -435,21 +438,50 @@ export default function GuestDetailDialog({
             const stayRemainingDays = isLive ? remainingDaysAfterMonths(guestDetail.checkInDate, stayMonths, nowLocalStr) : 0
             const monthlyRent = guestDetail.room.monthlyRent
 
-            // ─── Bill-based outstanding calculation ───
+            // ─── Accrual-based calculation (SAME formula as pg-billing.tsx) ───
+            // Source of truth: ACTUAL bill records capture correct rent per month
+            // Total Accrued = (Rent from bills + Unbilled rent) + (Maint from bills + Unbilled maint)
+            //                 + Electricity from bills + Adjustments from bills
+            // Total Due = Total Accrued - Total Paid
             const currentPeriod = isLive ? getCurrentBillingPeriod(guestDetail.checkInDate, nowLocalStr) : null
-            const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
-            const totalPaid = guestDetail.bills.reduce((sum, b) => sum + (b.paidAmount || 0), 0)
-            const totalOutstanding = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
 
+            // Bill-records-based calculation (handles rent changes correctly)
+            const billCount = guestDetail.bills.length
+            const unbilledMonths = Math.max(0, stayMonths - billCount)
+            const unbilledRent = unbilledMonths * monthlyRent
+            const unbilledMaintenance = unbilledMonths * (guestDetail.room.maintenanceCharge || 0)
+
+            // Sum components from bill records
+            const totalRentFromBills = guestDetail.bills.reduce((sum, b) => sum + b.rentAmount, 0)
+            const totalMaintenanceFromBills = guestDetail.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0)
+            const totalElectricity = guestDetail.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0)
+            const totalAdjustments = guestDetail.bills.reduce((sum, b) => sum + (b.manualAdjustment || 0), 0)
+
+            const totalAccruedRent = totalRentFromBills + unbilledRent
+            const totalAccruedMaintenance = totalMaintenanceFromBills + unbilledMaintenance
+
+            // Total Paid from all bills (Paid bills: full amount; others: paidAmount so far)
+            const totalPaid = guestDetail.bills.reduce((sum, b) => {
+              if (b.status === 'Paid') return sum + b.totalAmount
+              return sum + (b.paidAmount || 0)
+            }, 0)
+
+            const dynamicTotalAccrued = totalAccruedRent + totalAccruedMaintenance + totalElectricity + totalAdjustments
+            const totalBalance = Math.max(0, dynamicTotalAccrued - totalPaid)
+
+            // Current / Previous split
+            const unpaidBills = guestDetail.bills.filter((b) => b.status !== 'Paid')
             const currentPeriodBill = currentPeriod
               ? guestDetail.bills.find((b) => b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
               : null
 
+            // Current Bill: remaining on current period's bill, or monthlyRent if no bill exists
             const currentMonthBill = currentPeriodBill
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
-              : (currentPeriod ? monthlyRent : 0)
+              : (currentPeriod ? monthlyRent + (guestDetail.room.maintenanceCharge || 0) : 0)
 
-            const previousDue = Math.max(0, totalOutstanding - currentMonthBill)
+            const previousDue = Math.max(0, totalBalance - currentMonthBill)
+            const totalOutstanding = totalBalance // Same as totalBalance for the accrual model
 
             // ─── Electricity details ───
             const lastElecReading = guestDetail.electricityReadings?.[0]
@@ -637,8 +669,70 @@ export default function GuestDetailDialog({
                           <span className="text-xs font-bold tracking-wider text-red-700 uppercase">Live Billing Status</span>
                         </div>
                         <p className="text-xs text-muted-foreground mb-3">
-                          {totalDays} days &bull; {formatCurrency(stayMonths * monthlyRent)} total accrued
+                          {totalDays} days &bull; {stayMonths} months &bull; {formatCurrency(monthlyRent)}/mo
                         </p>
+
+                        {/* Step-by-Step Calculation */}
+                        <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 px-3 py-2 mb-3 text-xs space-y-0.5 font-mono">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Calculator className="h-3.5 w-3.5 text-emerald-500" />
+                            <span className="font-semibold text-emerald-800">Step-by-Step Calculation</span>
+                          </div>
+                          <div className="space-y-0.5 font-mono text-[11px]">
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground w-5">1.</span>
+                              <span className="text-emerald-700">Rent (bills):</span>
+                              <span>{billCount} bills = <span className="font-semibold">{formatCurrency(totalRentFromBills)}</span></span>
+                            </div>
+                            {unbilledRent > 0 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground w-5"></span>
+                                <span className="text-emerald-600/70">+ Unbilled:</span>
+                                <span>{unbilledMonths} months × {formatCurrency(monthlyRent)} = <span className="font-semibold">{formatCurrency(unbilledRent)}</span></span>
+                              </div>
+                            )}
+                            {totalAccruedMaintenance > 0 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground w-5">2.</span>
+                                <span className="text-amber-700">Maintenance:</span>
+                                <span>{billCount} bills = {formatCurrency(totalMaintenanceFromBills)}{unbilledMaintenance > 0 ? ` + ${unbilledMonths} × ${formatCurrency(guestDetail.room.maintenanceCharge || 0)} = ` : ' = '}<span className="font-semibold">{formatCurrency(totalAccruedMaintenance)}</span></span>
+                              </div>
+                            )}
+                            {totalElectricity > 0 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground w-5">{totalAccruedMaintenance > 0 ? '3' : '2'}.</span>
+                                <span className="text-yellow-600">Electricity:</span>
+                                <span>+ {formatCurrency(totalElectricity)}</span>
+                              </div>
+                            )}
+                            {totalAdjustments !== 0 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground w-5">
+                                  {(totalAccruedMaintenance > 0 ? 1 : 0) + (totalElectricity > 0 ? 1 : 0) + 2}.
+                                </span>
+                                <span className="text-purple-700">Adjustment:</span>
+                                <span>{totalAdjustments > 0 ? '+' : ''} {formatCurrency(totalAdjustments)}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 pt-0.5 border-t border-dashed border-emerald-200 mt-0.5">
+                              <span className="text-muted-foreground w-5"></span>
+                              <span className="text-emerald-800 font-semibold">Total Accrued:</span>
+                              <span className="font-semibold">{formatCurrency(dynamicTotalAccrued)}</span>
+                            </div>
+                            {totalPaid > 0 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-muted-foreground w-5"></span>
+                                <span className="text-teal-700">Minus Paid:</span>
+                                <span>- {formatCurrency(totalPaid)}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 pt-0.5 border-t-2 border-red-300 mt-0.5">
+                              <span className="text-muted-foreground w-5"></span>
+                              <span className="text-red-800 font-bold">Total Due:</span>
+                              <span className="text-red-800 font-extrabold text-sm">{formatCurrency(totalBalance)}</span>
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Three colored billing cards */}
                         <div className="grid grid-cols-3 gap-3 mb-3">
@@ -813,6 +907,9 @@ export default function GuestDetailDialog({
                                     <div className="flex items-center justify-between gap-2">
                                       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                                         <span>Rent: {formatCurrency(bill.rentAmount)}</span>
+                                        {(bill.maintenanceCharge || 0) > 0 && (
+                                          <span>Maint: {formatCurrency(bill.maintenanceCharge)}</span>
+                                        )}
                                         {bill.electricityCharge > 0 && (
                                           <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
                                         )}
@@ -886,6 +983,9 @@ export default function GuestDetailDialog({
                                     </div>
                                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                       <span>Rent: {formatCurrency(bill.rentAmount)}</span>
+                                      {(bill.maintenanceCharge || 0) > 0 && (
+                                        <span>Maint: {formatCurrency(bill.maintenanceCharge)}</span>
+                                      )}
                                       {bill.electricityCharge > 0 && (
                                         <span>Elec: {formatCurrency(bill.electricityCharge)}</span>
                                       )}

@@ -56,7 +56,9 @@ export async function POST(request: Request) {
 
     // Calculate rent for total months
     const monthlyRent = guest.room.monthlyRent;
+    const maintenanceChargePerMonth = guest.room.maintenanceCharge || 0;
     const totalRent = monthlyRent * totalMonths;
+    const totalMaintenance = maintenanceChargePerMonth * totalMonths;
 
     // Calculate total paid from all bills (sum of paidAmount across all statuses)
     // Paid bills: full totalAmount paid. Others: partial paidAmount.
@@ -76,10 +78,17 @@ export async function POST(request: Request) {
 
     // Total billed from bill records
     const totalBilled = guest.bills.reduce((sum, b) => sum + b.totalAmount, 0);
-    // Remaining rent to charge (total accrued rent minus what's already billed)
-    const remainingRent = Math.max(0, totalRent - totalBilled);
-    // Total balance = Total Accrued Rent - Total Paid
-    const totalBalance = Math.max(0, totalRent - totalPaid);
+    // Also calculate how much rent and maintenance have been billed separately
+    const totalRentBilled = guest.bills.reduce((sum, b) => sum + b.rentAmount, 0);
+    const totalMaintenanceBilled = guest.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0);
+    // Remaining rent to charge (total accrued rent + maintenance minus what's already billed)
+    const totalAccrued = totalRent + totalMaintenance;
+    const remainingRent = Math.max(0, totalAccrued - totalBilled);
+    // Split remaining into rent and maintenance components for the checkout bill
+    const remainingRentPortion = Math.max(0, totalRent - totalRentBilled);
+    const remainingMaintPortion = Math.max(0, totalMaintenance - totalMaintenanceBilled);
+    // Total balance = Total Accrued (Rent + Maintenance) - Total Paid
+    const totalBalance = Math.max(0, totalAccrued - totalPaid);
 
     // Calculate electricity charge from the last bill's rate
     let electricityCharge = 0;
@@ -177,7 +186,8 @@ export async function POST(request: Request) {
             roomId: guest.roomId,
             billingMonth: checkOutDateParts.month,
             billingYear: checkOutDateParts.year,
-            rentAmount: remainingRent,
+            rentAmount: remainingRentPortion,
+            maintenanceCharge: remainingMaintPortion,
             electricityCharge,
             previousReading: lastReading,
             currentReading: currentMeterReading ?? lastReading,
@@ -187,7 +197,7 @@ export async function POST(request: Request) {
             manualAdjustment: 0,
             adjustmentReason: 'Checkout bill',
             isCustomBill: false,
-            totalAmount: remainingRent + electricityCharge,
+            totalAmount: remainingRentPortion + remainingMaintPortion + electricityCharge,
             dueDate: new Date(checkOutDate),
             status: 'Unpaid',
           },
@@ -204,6 +214,7 @@ export async function POST(request: Request) {
               unitsConsumed,
               totalAmount:
                 latestUnpaid.rentAmount +
+                (latestUnpaid.maintenanceCharge || 0) +
                 electricityCharge +
                 latestUnpaid.manualAdjustment,
             },

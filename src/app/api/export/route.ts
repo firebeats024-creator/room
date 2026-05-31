@@ -86,6 +86,7 @@ export async function GET() {
         Floor: r.floor,
         Type: r.type,
         'Monthly Rent (₹)': r.monthlyRent,
+        'Maintenance Charge (₹)': r.maintenanceCharge || 0,
         Status: r.status,
         'Occupant': activeGuest?.name || '',
         'Check-in Date': activeGuest ? fmtDate(activeGuest.checkInDate) : '',
@@ -105,9 +106,16 @@ export async function GET() {
         0
       );
       const totalBilled = g.bills.reduce((sum, b) => sum + b.totalAmount, 0);
-      // Use dynamic accrual-based balance: stayMonths × rent - totalPaid
-      // For checked-out guests with all bills, also compare against totalBilled - totalPaid
-      const accruedBalance = Math.max(0, stayMonths * g.room.monthlyRent - totalPaid);
+      // Use bill-records-based balance: sum from actual bills + unbilled months - totalPaid
+      const billCount = g.bills.length;
+      const unbilledMonths = Math.max(0, stayMonths - billCount);
+      const totalRentFromBills = g.bills.reduce((sum, b) => sum + b.rentAmount, 0);
+      const totalMaintenanceFromBills = g.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0);
+      const totalElectricity = g.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0);
+      const totalAccruedRent = totalRentFromBills + unbilledMonths * g.room.monthlyRent;
+      const totalAccruedMaintenance = totalMaintenanceFromBills + unbilledMonths * (g.room.maintenanceCharge || 0);
+      const dynamicTotalAccrued = totalAccruedRent + totalAccruedMaintenance + totalElectricity;
+      const accruedBalance = Math.max(0, dynamicTotalAccrued - totalPaid);
       const billBalance = Math.max(0, totalBilled - totalPaid);
       const totalBalance = isLive ? accruedBalance : Math.max(accruedBalance, billBalance);
 
@@ -149,6 +157,7 @@ export async function GET() {
       'Room Type': b.room.type,
       'Billing Month': `${MONTH_NAMES[b.billingMonth - 1]} ${b.billingYear}`,
       'Rent (₹)': fmtCurrency(b.rentAmount),
+      'Maintenance (₹)': fmtCurrency(b.maintenanceCharge || 0),
       'Electricity (₹)': fmtCurrency(b.electricityCharge),
       'Previous Reading': b.previousReading,
       'Current Reading': b.currentReading,
@@ -255,7 +264,9 @@ export async function GET() {
         0
       );
       const gAccruedRent = gStayMonths * g.room.monthlyRent;
-      const gTotalBalance = Math.max(0, gAccruedRent - gTotalPaid);
+      const gAccruedMaintenance = gStayMonths * (g.room.maintenanceCharge || 0);
+      const gTotalAccrued = gAccruedRent + gAccruedMaintenance + g.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0);
+      const gTotalBalance = Math.max(0, gTotalAccrued - gTotalPaid);
       const gDaysStayed = daysBetween(g.checkInDate, referenceDate);
 
       // Current Bill and Previous Due
@@ -269,7 +280,7 @@ export async function GET() {
         const latestUnpaid = unpaidBills[unpaidBills.length - 1];
         currentBillAmt = Math.max(0, latestUnpaid.totalAmount - (latestUnpaid.paidAmount || 0));
       } else if (isLive) {
-        currentBillAmt = g.room.monthlyRent;
+        currentBillAmt = g.room.monthlyRent + (g.room.maintenanceCharge || 0);
       }
       const previousDueAmt = Math.max(0, gTotalBalance - currentBillAmt);
 
@@ -282,8 +293,11 @@ export async function GET() {
         'Days Stayed': gDaysStayed,
         'Stay Months': gStayMonths,
         'Monthly Rent (₹)': g.room.monthlyRent,
+        'Maintenance/Mo (₹)': g.room.maintenanceCharge || 0,
         'Accrued Rent (₹)': fmtCurrency(gAccruedRent),
-        'Calculation': `${gStayMonths} × ₹${g.room.monthlyRent}`,
+        'Accrued Maint. (₹)': fmtCurrency(gAccruedMaintenance),
+        'Total Accrued (₹)': fmtCurrency(gTotalAccrued),
+        'Calculation': `${gStayMonths} × ₹${g.room.monthlyRent} + ${gStayMonths} × ₹${g.room.maintenanceCharge || 0}`,
         'Total Paid (₹)': fmtCurrency(gTotalPaid),
         'Current Bill (₹)': fmtCurrency(currentBillAmt),
         'Previous Due (₹)': fmtCurrency(previousDueAmt),

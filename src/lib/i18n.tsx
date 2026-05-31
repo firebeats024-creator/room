@@ -131,6 +131,13 @@ export const translations = {
     rooms_single: 'Single',
     rooms_double: 'Double',
     rooms_triple: 'Triple',
+    rooms_maintenance_charge: 'Maintenance Charge',
+    rooms_maintenance_hint: 'Monthly maintenance charge added to bill (0 = no charge)',
+    rooms_edit_maintenance: 'Edit Maintenance Charge',
+    rooms_edit_maintenance_desc: 'Update the monthly maintenance charge for this room. It will be added to the bill each month.',
+    rooms_current_maintenance: 'Current Maintenance',
+    rooms_new_maintenance: 'New Maintenance Charge',
+    rooms_maintenance_diff: 'Difference',
 
     // Room status
     status_vacant: 'Vacant',
@@ -573,6 +580,13 @@ export const translations = {
     rooms_single: 'सिंगल',
     rooms_double: 'डबल',
     rooms_triple: 'ट्रिपल',
+    rooms_maintenance_charge: 'मेंटेनेंस चार्ज',
+    rooms_maintenance_hint: 'मासिक मेंटेनेंस चार्ज बिल में जुड़ेगा (0 = कोई चार्ज नहीं)',
+    rooms_edit_maintenance: 'मेंटेनेंस चार्ज बदलें',
+    rooms_edit_maintenance_desc: 'इस कमरे का मासिक मेंटेनेंस चार्ज अपडेट करें। यह हर महीने बिल में जुड़ेगा।',
+    rooms_current_maintenance: 'वर्तमान मेंटेनेंस',
+    rooms_new_maintenance: 'नया मेंटेनेंस चार्ज',
+    rooms_maintenance_diff: 'अंतर',
 
     // Room status
     status_vacant: 'खाली',

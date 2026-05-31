@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { calculateAccruedRentWithChanges } from '@/lib/billing-utils';
+import { calculateStayMonths } from '@/lib/billing-utils';
 
 // GET /api/dashboard - Get dashboard statistics
 export async function GET() {
@@ -94,6 +94,7 @@ export async function GET() {
             type: true,
             baseRent: true,
             monthlyRent: true,
+            maintenanceCharge: true,
           },
         },
         bills: {
@@ -103,6 +104,7 @@ export async function GET() {
             paidAmount: true,
             status: true,
             rentAmount: true,
+            maintenanceCharge: true,
             electricityCharge: true,
             billingMonth: true,
             billingYear: true,
@@ -111,30 +113,29 @@ export async function GET() {
       },
     });
 
-    // Fetch all rent changes for all rooms (to calculate accrued rent correctly)
-    const allRentChanges = await db.rentChange.findMany({
-      select: {
-        id: true,
-        roomId: true,
-        oldRent: true,
-        newRent: true,
-        effectiveDate: true,
-      },
-      orderBy: { effectiveDate: 'asc' },
-    });
-
-    // Group rent changes by roomId
-    const rentChangesByRoom: Record<string, typeof allRentChanges> = {};
-    for (const rc of allRentChanges) {
-      if (!rentChangesByRoom[rc.roomId]) rentChangesByRoom[rc.roomId] = [];
-      rentChangesByRoom[rc.roomId].push(rc);
-    }
-
-    // Calculate billing summary for each guest
+    // Calculate billing summary for each guest (BILL-RECORDS-BASED — same as billing page)
     const recentGuestsWithBilling = recentGuests.map(guest => {
-      const unpaidBills = guest.bills.filter(b => b.status !== 'Paid');
-      const totalPaid = guest.bills.reduce((sum, b) => sum + (b.paidAmount || 0), 0);
-      const totalOutstanding = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0);
+      // Bill-records-based calculation: uses actual bill amounts (handles rent changes correctly)
+      const totalPaid = guest.bills.reduce((sum, b) => {
+        if (b.status === 'Paid') return sum + b.totalAmount;
+        return sum + (b.paidAmount || 0);
+      }, 0);
+      const totalElectricity = guest.bills.reduce((sum, b) => sum + (b.electricityCharge || 0), 0);
+      const totalMaintenance = guest.bills.reduce((sum, b) => sum + (b.maintenanceCharge || 0), 0);
+      const totalAdjustments = guest.bills.reduce((sum, b) => sum + (b.manualAdjustment || 0), 0);
+
+      // Bill-records-based rent calculation (handles rent changes correctly)
+      const monthlyRent = guest.room.monthlyRent;
+      const stayMonths = calculateStayMonths(guest.checkInDate);
+      const billCount = guest.bills.length;
+      const unbilledMonths = Math.max(0, stayMonths - billCount);
+      const totalRentFromBills = guest.bills.reduce((sum, b) => sum + b.rentAmount, 0);
+      const totalAccruedRent = totalRentFromBills + unbilledMonths * monthlyRent;
+      const totalAccruedMaintenance = totalMaintenance + unbilledMonths * (guest.room.maintenanceCharge || 0);
+
+      const dynamicTotalAccrued = totalAccruedRent + totalAccruedMaintenance + totalElectricity + totalAdjustments;
+      const totalOutstanding = Math.max(0, dynamicTotalAccrued - totalPaid);
+      const totalBalance = totalOutstanding;
 
       // Current billing period
       const now = new Date();
@@ -150,30 +151,18 @@ export async function GET() {
         if (currentMonth === 0) { currentMonth = 12; currentYear--; }
       }
 
+      const unpaidBills = guest.bills.filter(b => b.status !== 'Paid');
       const currentPeriodBill = guest.bills.find(b => b.billingMonth === currentMonth && b.billingYear === currentYear);
-      const monthlyRent = guest.room.monthlyRent;
       const currentMonthBill = currentPeriodBill
         ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
-        : monthlyRent;
-      const previousDue = Math.max(0, totalOutstanding - currentMonthBill);
+        : monthlyRent + (guest.room.maintenanceCharge || 0);
+      const previousDue = Math.max(0, totalBalance - currentMonthBill);
 
       // Calculate stay months
       const checkIn = new Date(guest.checkInDate);
       let months = (now.getFullYear() - checkIn.getFullYear()) * 12 + (now.getMonth() - checkIn.getMonth());
       if (now.getDate() < checkIn.getDate()) months--;
       if (months < 0) months = 0;
-
-      // Calculate totalAccruedRent accounting for rent changes
-      const roomRentChanges = rentChangesByRoom[guest.roomId] || [];
-      const { totalAccruedRent } = calculateAccruedRentWithChanges(
-        guest.checkInDate,
-        monthlyRent,
-        roomRentChanges.map(rc => ({
-          effectiveDate: rc.effectiveDate,
-          newRent: rc.newRent,
-          oldRent: rc.oldRent,
-        }))
-      );
 
       return {
         id: guest.id,

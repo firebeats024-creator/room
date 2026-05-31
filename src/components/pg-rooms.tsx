@@ -77,6 +77,7 @@ interface Room {
   type: string
   baseRent: number
   monthlyRent: number
+  maintenanceCharge: number
   status: string
   createdAt: string
   updatedAt: string
@@ -96,6 +97,7 @@ interface GuestBill {
   paidAmount: number
   status: string
   rentAmount: number
+  maintenanceCharge: number
   electricityCharge: number
   billingMonth: number
   billingYear: number
@@ -157,6 +159,7 @@ interface GuestFull {
     type: string
     baseRent: number
     monthlyRent: number
+    maintenanceCharge: number
     status: string
   }
   securityDeposit: SecurityDeposit | null
@@ -244,6 +247,13 @@ export default function PGRooms() {
   const [formFloor, setFormFloor] = useState('1')
   const [formType, setFormType] = useState('Single')
   const [formRent, setFormRent] = useState('5000')
+  const [formMaintenanceCharge, setFormMaintenanceCharge] = useState('0')
+
+  // Edit maintenance charge dialog state
+  const [editMaintenanceOpen, setEditMaintenanceOpen] = useState(false)
+  const [editMaintenanceRoom, setEditMaintenanceRoom] = useState<Room | null>(null)
+  const [editMaintenanceCharge, setEditMaintenanceCharge] = useState('0')
+  const [editMaintenanceSubmitting, setEditMaintenanceSubmitting] = useState(false)
 
   // Guest details dialog state
   const [guestDetailOpen, setGuestDetailOpen] = useState(false)
@@ -338,6 +348,7 @@ export default function PGRooms() {
     setFormFloor('1')
     setFormType('Single')
     setFormRent('5000')
+    setFormMaintenanceCharge('0')
   }
 
   // ─── Add room ───
@@ -358,6 +369,7 @@ export default function PGRooms() {
           floor: parseInt(formFloor) || 1,
           type: formType,
           monthlyRent: parseFloat(formRent) || 5000,
+          maintenanceCharge: parseFloat(formMaintenanceCharge) || 0,
         }),
       })
 
@@ -680,6 +692,42 @@ export default function PGRooms() {
     }
   }
 
+  // ─── Edit Maintenance Charge handler ───
+
+  const handleEditMaintenance = async () => {
+    if (!editMaintenanceRoom) return
+    const newCharge = parseFloat(editMaintenanceCharge) || 0
+    if (newCharge < 0) {
+      toast.error('Maintenance charge cannot be negative')
+      return
+    }
+
+    setEditMaintenanceSubmitting(true)
+    try {
+      const res = await fetch('/api/rooms', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: editMaintenanceRoom.id,
+          maintenanceCharge: newCharge,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update maintenance charge')
+        return
+      }
+
+      toast.success(`Maintenance charge for Room ${editMaintenanceRoom.roomNo} updated to ${formatCurrency(newCharge)}`)
+      setEditMaintenanceOpen(false)
+      fetchRooms()
+    } catch {
+      toast.error('Failed to update maintenance charge')
+    } finally {
+      setEditMaintenanceSubmitting(false)
+    }
+  }
+
   // ─── Member Update handler ───
 
   const handleMemberUpdate = async () => {
@@ -863,6 +911,20 @@ export default function PGRooms() {
                       onChange={(e) => setFormRent(e.target.value)}
                       className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
                     />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="maintenanceCharge">{t('rooms_maintenance_charge')}</Label>
+                    <Input
+                      id="maintenanceCharge"
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={formMaintenanceCharge}
+                      onChange={(e) => setFormMaintenanceCharge(e.target.value)}
+                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                    />
+                    <p className="text-xs text-muted-foreground">{t('rooms_maintenance_hint')}</p>
                   </div>
                 </div>
 
@@ -1077,6 +1139,32 @@ export default function PGRooms() {
                         {t('rooms_default_rent_info')}: {formatCurrency(room.baseRent)}
                       </div>
                     )}
+
+                    {/* Maintenance Charge row */}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-gray-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                        {t('rooms_maintenance_charge')}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`font-semibold ${room.maintenanceCharge > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                          {room.maintenanceCharge > 0 ? formatCurrency(room.maintenanceCharge) : '—'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-gray-400 hover:text-orange-600 hover:bg-orange-50"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditMaintenanceRoom(room)
+                            setEditMaintenanceCharge(String(room.maintenanceCharge || 0))
+                            setEditMaintenanceOpen(true)
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        </Button>
+                      </div>
+                    </div>
 
                     {/* Guest info for occupied rooms — clickable */}
                     {status === 'Occupied' && activeGuest && (
@@ -2206,6 +2294,106 @@ export default function PGRooms() {
                 <>
                   <Zap className="mr-2 h-4 w-4" />
                   Update Reading
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════ EDIT MAINTENANCE CHARGE DIALOG ═══════════ */}
+      <Dialog open={editMaintenanceOpen} onOpenChange={setEditMaintenanceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              {t('rooms_edit_maintenance')} — Room {editMaintenanceRoom?.roomNo}
+            </DialogTitle>
+            <DialogDescription>
+              {t('rooms_edit_maintenance_desc')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Current charge */}
+            <Card className="border-gray-200 bg-gray-50/50">
+              <CardContent className="p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('rooms_current_maintenance')}</span>
+                  <span className="font-semibold text-gray-800">
+                    {editMaintenanceRoom ? formatCurrency(editMaintenanceRoom.maintenanceCharge || 0) : '—'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* New charge */}
+            <div className="space-y-2">
+              <Label htmlFor="editMaintenanceCharge">
+                {t('rooms_new_maintenance')} (₹)
+              </Label>
+              <Input
+                id="editMaintenanceCharge"
+                type="number"
+                min="0"
+                placeholder="0"
+                value={editMaintenanceCharge}
+                onChange={(e) => setEditMaintenanceCharge(e.target.value)}
+                className="font-mono text-lg border-orange-200 focus-visible:border-orange-400 focus-visible:ring-orange-400/30"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {t('rooms_maintenance_hint')}
+              </p>
+            </div>
+
+            {/* Preview */}
+            {(() => {
+              const newCharge = parseFloat(editMaintenanceCharge) || 0
+              const oldCharge = editMaintenanceRoom?.maintenanceCharge || 0
+              if (newCharge === oldCharge) return null
+              const diff = newCharge - oldCharge
+              return (
+                <Card className={`border ${diff > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-emerald-200 bg-emerald-50/30'}`}>
+                  <CardContent className="p-4 space-y-1.5 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground text-xs">{t('rooms_current_maintenance')}</span>
+                      <span className="font-medium text-xs">{formatCurrency(oldCharge)}/mo</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground text-xs">{t('rooms_new_maintenance')}</span>
+                      <span className="font-medium text-xs">{formatCurrency(newCharge)}/mo</span>
+                    </div>
+                    <Separator className="my-1.5" />
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-xs">{t('rooms_maintenance_diff')}</span>
+                      <span className={`font-bold text-xs ${diff > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {diff > 0 ? '+' : ''}{formatCurrency(diff)}/mo
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setEditMaintenanceOpen(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={handleEditMaintenance}
+              disabled={editMaintenanceSubmitting}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {editMaintenanceSubmitting ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  {t('saving')}
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  {t('save')}
                 </>
               )}
             </Button>

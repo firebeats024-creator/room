@@ -47,7 +47,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomNo, floor, type, monthlyRent, status } = body;
+    const { roomNo, floor, type, monthlyRent, maintenanceCharge, status } = body;
 
     // Validate required fields
     if (!roomNo) {
@@ -76,6 +76,7 @@ export async function POST(request: Request) {
         type: type ?? 'Single',
         baseRent: monthlyRent ?? 5000,
         monthlyRent: monthlyRent ?? 5000,
+        maintenanceCharge: maintenanceCharge ?? 0,
         status: status ?? 'Vacant',
       },
     });
@@ -85,6 +86,58 @@ export async function POST(request: Request) {
     console.error('Error creating room:', error);
     return NextResponse.json(
       { error: 'Failed to create room' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/rooms - Update a room (maintenance charge, etc.)
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { roomId, maintenanceCharge } = body;
+
+    if (!roomId) {
+      return NextResponse.json(
+        { error: 'Room ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const existing = await db.room.findUnique({
+      where: { id: roomId },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Room not found' },
+        { status: 404 }
+      );
+    }
+
+    const updateData: Record<string, unknown> = {};
+
+    if (maintenanceCharge !== undefined && maintenanceCharge !== null) {
+      updateData.maintenanceCharge = maintenanceCharge;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'No fields to update' },
+        { status: 400 }
+      );
+    }
+
+    const room = await db.room.update({
+      where: { id: roomId },
+      data: updateData,
+    });
+
+    return NextResponse.json(room);
+  } catch (error) {
+    console.error('Error updating room:', error);
+    return NextResponse.json(
+      { error: 'Failed to update room' },
       { status: 500 }
     );
   }

@@ -240,6 +240,11 @@ export async function GET(
     // Rent row
     drawRow('Rent Amount', 'Monthly Rent', formatCurrency(bill.rentAmount));
 
+    // Maintenance Charge
+    if (bill.maintenanceCharge > 0) {
+      drawRow('Maintenance Charge', 'Monthly Maintenance', formatCurrency(bill.maintenanceCharge));
+    }
+
     // Electricity section
     drawRow(
       'Electricity',
