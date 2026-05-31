@@ -319,7 +319,7 @@ export default function PgGuests() {
       setCheckinOpen(false);
       fetchGuests();
     } catch {
-      toast.error('Failed to check in guest');
+      toast.error('Failed to check in tenant');
     } finally {
       setCheckinSubmitting(false);
     }
@@ -430,7 +430,7 @@ export default function PgGuests() {
       setResultOpen(true);
       fetchGuests();
     } catch {
-      toast.error('Failed to check out guest');
+      toast.error('Failed to check out tenant');
     } finally {
       setCheckoutSubmitting(false);
     }
@@ -1128,7 +1128,7 @@ export default function PgGuests() {
                                 {t('checkout_deposit_info')}: {preview.depositStatus}
                               </p>
                               <p className="text-amber-700 dark:text-amber-400 mt-0.5">
-                                {t('checkout_deposit')} ({formatCurrency(preview.depositAmount)}) was already processed. Guest owes full dues.
+                                {t('checkout_deposit')} ({formatCurrency(preview.depositAmount)}) was already processed. Tenant owes full dues.
                               </p>
                             </div>
                           </div>
@@ -1144,7 +1144,7 @@ export default function PgGuests() {
                             <span className={preview.depositAdjustment >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
                               {preview.depositAdjustment >= 0
                                 ? `Refund ${formatCurrency(preview.depositAdjustment)}`
-                                : `Guest owes ${formatCurrency(Math.abs(preview.depositAdjustment))}`}
+                                : `Tenant owes ${formatCurrency(Math.abs(preview.depositAdjustment))}`}
                             </span>
                           </div>
                         </>

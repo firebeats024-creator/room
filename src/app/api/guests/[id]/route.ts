@@ -22,6 +22,7 @@ export async function GET(
             type: true,
             baseRent: true,
             monthlyRent: true,
+            maintenanceCharge: true,
             status: true,
           },
         },
@@ -33,6 +34,7 @@ export async function GET(
             paidAmount: true,
             status: true,
             rentAmount: true,
+            maintenanceCharge: true,
             electricityCharge: true,
             billingMonth: true,
             billingYear: true,
@@ -112,7 +114,7 @@ export async function GET(
         if (bill.isCustomBill && bill.customTotal !== null && bill.customTotal !== undefined) {
           newTotalAmount = bill.customTotal;
         } else {
-          newTotalAmount = bill.rentAmount + newElecCharge + bill.manualAdjustment;
+          newTotalAmount = bill.rentAmount + (bill.maintenanceCharge || 0) + newElecCharge + bill.manualAdjustment;
         }
 
         if (needsFix || newCurrentReading !== bill.currentReading ||
@@ -147,6 +149,7 @@ export async function GET(
                 type: true,
                 baseRent: true,
                 monthlyRent: true,
+                maintenanceCharge: true,
                 status: true,
               },
             },
@@ -158,6 +161,7 @@ export async function GET(
                 paidAmount: true,
                 status: true,
                 rentAmount: true,
+                maintenanceCharge: true,
                 electricityCharge: true,
                 billingMonth: true,
                 billingYear: true,
@@ -293,6 +297,7 @@ export async function GET(
           // ─── RENT-AWARE: Use the correct rent for this billing period ───
           const rentForThisPeriod = getRentForPeriod(iterMonth, iterYear);
 
+          const maintenanceChargeForPeriod = guest.room.maintenanceCharge || 0;
           const newBill = await db.bill.create({
             data: {
               guestId: guest.id,
@@ -300,6 +305,7 @@ export async function GET(
               billingMonth: iterMonth,
               billingYear: iterYear,
               rentAmount: rentForThisPeriod,
+              maintenanceCharge: maintenanceChargeForPeriod,
               electricityCharge: 0,
               previousReading,
               currentReading: previousReading, // same as previous until a new reading is taken
@@ -309,7 +315,7 @@ export async function GET(
               manualAdjustment: 0,
               adjustmentReason: '',
               isCustomBill: false,
-              totalAmount: rentForThisPeriod,
+              totalAmount: rentForThisPeriod + maintenanceChargeForPeriod,
               dueDate,
               status: 'Unpaid',
             },
@@ -322,6 +328,7 @@ export async function GET(
             paidAmount: newBill.paidAmount,
             status: newBill.status,
             rentAmount: newBill.rentAmount,
+            maintenanceCharge: newBill.maintenanceCharge,
             electricityCharge: newBill.electricityCharge,
             billingMonth: newBill.billingMonth,
             billingYear: newBill.billingYear,
@@ -375,6 +382,7 @@ export async function GET(
                 type: true,
                 baseRent: true,
                 monthlyRent: true,
+                maintenanceCharge: true,
                 status: true,
               },
             },
@@ -386,6 +394,7 @@ export async function GET(
                 paidAmount: true,
                 status: true,
                 rentAmount: true,
+                maintenanceCharge: true,
                 electricityCharge: true,
                 billingMonth: true,
                 billingYear: true,

@@ -662,7 +662,7 @@ export default function PgDashboard() {
         <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0 gap-0">
           {/* Visually hidden title for screen reader accessibility */}
           <DialogTitle className="sr-only">{t('guest_details_title')}</DialogTitle>
-          <DialogDescription className="sr-only">View guest details and billing information</DialogDescription>
+          <DialogDescription className="sr-only">View tenant details and billing information</DialogDescription>
           {guestDetailLoading ? (
             <div className="p-6 space-y-4">
               <Skeleton className="h-32 w-full" />
@@ -979,7 +979,7 @@ export default function PgDashboard() {
             )
           })() : (
             <div className="p-8 text-center text-gray-400">
-              No guest details found
+              No tenant details found
             </div>
           )}
         </DialogContent>

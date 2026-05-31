@@ -193,7 +193,7 @@ function AppContent() {
       const d = seedData.deleted
       toast.success(lang === 'hi'
         ? `सारा डेटा साफ़! ${d.guests} किराएदार, ${d.bills} बिल, ${d.rooms} कमरे हटाए`
-        : `All data cleared! ${d.guests} guests, ${d.bills} bills, ${d.rooms} rooms removed`
+        : `All data cleared! ${d.guests} tenants, ${d.bills} bills, ${d.rooms} rooms removed`
       )
       // Refresh the page to reload all components with empty data
       setTimeout(() => {

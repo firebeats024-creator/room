@@ -152,6 +152,7 @@ export async function POST(request: Request) {
       const effectiveDueDay = Math.min(billingCycleDate, maxDayInDueMonth);
       const dueDate = new Date(dueYear, dueMonth - 1, effectiveDueDay);
 
+      const maintenanceCharge = guest.room.maintenanceCharge || 0;
       currentBill = await db.bill.create({
         data: {
           guestId,
@@ -159,6 +160,7 @@ export async function POST(request: Request) {
           billingMonth: currentBillingMonth,
           billingYear: currentBillingYear,
           rentAmount: monthlyRent,
+          maintenanceCharge,
           electricityCharge: 0,
           previousReading,
           currentReading: previousReading, // same as previous until reading is taken
@@ -168,7 +170,7 @@ export async function POST(request: Request) {
           manualAdjustment: 0,
           adjustmentReason: '',
           isCustomBill: false,
-          totalAmount: monthlyRent,
+          totalAmount: monthlyRent + maintenanceCharge,
           dueDate,
           status: 'Unpaid',
         },
@@ -231,7 +233,8 @@ export async function POST(request: Request) {
     const unitsConsumed = Math.max(0, currentReading - previousReading);
     const ratePerUnit = currentBill.ratePerUnit ?? 10;
     const electricityCharge = unitsConsumed * ratePerUnit;
-    const newTotalAmount = currentBill.rentAmount + electricityCharge + currentBill.manualAdjustment;
+    const effectiveMaintenanceCharge = currentBill.maintenanceCharge || 0;
+    const newTotalAmount = currentBill.rentAmount + effectiveMaintenanceCharge + electricityCharge + currentBill.manualAdjustment;
 
     await db.bill.update({
       where: { id: currentBill.id },

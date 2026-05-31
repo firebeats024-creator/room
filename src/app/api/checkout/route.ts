@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     // Validate required fields
     if (!guestId || !checkOutDate) {
       return NextResponse.json(
-        { error: 'Guest ID and checkOutDate are required' },
+        { error: 'Tenant ID and checkOutDate are required' },
         { status: 400 }
       );
     }
@@ -33,14 +33,14 @@ export async function POST(request: Request) {
 
     if (!guest) {
       return NextResponse.json(
-        { error: 'Guest not found' },
+        { error: 'Tenant not found' },
         { status: 404 }
       );
     }
 
     if (guest.status === 'Checked-out') {
       return NextResponse.json(
-        { error: 'Guest is already checked out' },
+        { error: 'Tenant is already checked out' },
         { status: 409 }
       );
     }
@@ -279,21 +279,21 @@ export async function POST(request: Request) {
       netAmount,
       netAmountLabel:
         netAmount > 0
-          ? `Guest owes ₹${netAmount}`
+          ? `Tenant owes ₹${netAmount}`
           : netAmount < 0
-            ? `Refund ₹${Math.abs(netAmount)} to guest`
+            ? `Refund ₹${Math.abs(netAmount)} to tenant`
             : 'Settled - no dues',
       unpaidBills: unpaidBillsList,
     };
 
     return NextResponse.json({
-      message: 'Guest checked out successfully',
+      message: 'Tenant checked out successfully',
       summary,
     });
   } catch (error) {
     console.error('Error during checkout:', error);
     return NextResponse.json(
-      { error: 'Failed to check out guest' },
+      { error: 'Failed to check out tenant' },
       { status: 500 }
     );
   }

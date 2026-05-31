@@ -414,7 +414,7 @@ export default function PGRooms() {
   const handleCheckIn = async () => {
     if (!checkInRoom) return
     if (!ciName.trim()) {
-      toast.error('Guest name is required')
+      toast.error('Tenant name is required')
       return
     }
 
@@ -681,7 +681,7 @@ export default function PGRooms() {
       toast.success(
         data.isBaseRentUpdate
           ? `Default rent updated from ₹${data.oldRent} to ₹${data.newRent}!`
-          : `Rent updated from ₹${data.oldRent} to ₹${data.newRent}! ${data.guestsAffected} guest(s) affected.`
+          : `Rent updated from ₹${data.oldRent} to ₹${data.newRent}! ${data.guestsAffected} tenant(s) affected.`
       )
       setRentUpdateOpen(false)
       fetchRooms() // Refresh rooms
@@ -1224,8 +1224,8 @@ export default function PGRooms() {
       <Dialog open={guestDetailOpen} onOpenChange={setGuestDetailOpen}>
         <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0 gap-0">
           {/* Visually hidden title for screen reader accessibility */}
-          <DialogTitle className="sr-only">Guest Details</DialogTitle>
-          <DialogDescription className="sr-only">View guest details and billing information</DialogDescription>
+          <DialogTitle className="sr-only">Tenant Details</DialogTitle>
+          <DialogDescription className="sr-only">View tenant details and billing information</DialogDescription>
           {guestDetailLoading ? (
             <div className="p-6 space-y-4">
               <Skeleton className="h-32 w-full" />
@@ -1625,7 +1625,7 @@ export default function PGRooms() {
             )
           })() : (
             <div className="p-8 text-center text-gray-400">
-              No guest details found
+              No tenant details found
             </div>
           )}
         </DialogContent>
@@ -1645,7 +1645,7 @@ export default function PGRooms() {
               )}
             </DialogTitle>
             <DialogDescription>
-              Fill in guest details to check them into this room
+              Fill in tenant details to check them into this room
             </DialogDescription>
           </DialogHeader>
 
@@ -1765,7 +1765,7 @@ export default function PGRooms() {
                   <Label htmlFor="ciPhotoLink">{t('checkin_photo_link')}</Label>
                   <Input
                     id="ciPhotoLink"
-                    placeholder="URL to guest photo (optional)"
+                    placeholder="URL to tenant photo (optional)"
                     value={ciPhotoLink}
                     onChange={(e) => setCiPhotoLink(e.target.value)}
                     className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
@@ -2411,7 +2411,7 @@ export default function PGRooms() {
             </DialogTitle>
             <DialogDescription>
               {rentUpdateRoom?.status === 'Vacant'
-                ? 'Change the default rent for this room. This will be the rent for the next guest.'
+                ? 'Change the default rent for this room. This will be the rent for the next tenant.'
                 : 'Change the monthly rent. Existing bills will NOT be affected. New rent applies from the effective date.'}
             </DialogDescription>
           </DialogHeader>
@@ -2427,7 +2427,7 @@ export default function PGRooms() {
                       <span className="font-semibold text-gray-800">{rentUpdateRoom ? formatCurrency(rentUpdateRoom.baseRent) : '—'}</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground">
-                      This is the rent that will apply to the next guest who checks in.
+                      This is the rent that will apply to the next tenant who checks in.
                     </p>
                   </>
                 ) : (
@@ -2443,7 +2443,7 @@ export default function PGRooms() {
                       </div>
                     )}
                     <p className="text-[10px] text-muted-foreground">
-                      Base rent resets automatically when guest checks out
+                      Base rent resets automatically when tenant checks out
                     </p>
                   </>
                 )}

@@ -4,6 +4,26 @@ import { db } from '@/lib/db';
 // GET /api/bills - Get all bills with guest and room info
 export async function GET() {
   try {
+    // ─── BACKFILL: Fix existing bills where maintenanceCharge=0 but room has maintenance > 0 ───
+    // This auto-repairs bills that were created before the maintenance charge feature was added
+    const billsNeedingMaintFix = await db.bill.findMany({
+      where: { maintenanceCharge: 0 },
+      include: { room: { select: { maintenanceCharge: true } } },
+    });
+    for (const bill of billsNeedingMaintFix) {
+      const roomMaint = bill.room.maintenanceCharge;
+      if (roomMaint > 0) {
+        const newTotal = bill.rentAmount + roomMaint + bill.electricityCharge + bill.manualAdjustment;
+        await db.bill.update({
+          where: { id: bill.id },
+          data: {
+            maintenanceCharge: roomMaint,
+            totalAmount: bill.isCustomBill ? bill.totalAmount : newTotal,
+          },
+        });
+      }
+    }
+
     // Auto-mark overdue bills: ALL Unpaid bills become Overdue (no separate "Unpaid" concept)
     // Also mark Partially-Paid bills past due date as Overdue
     const today = new Date();

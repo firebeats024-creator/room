@@ -107,7 +107,7 @@ export async function GET(
       .fillColor(PRIMARY_COLOR)
       .fontSize(12)
       .font('Helvetica-Bold')
-      .text('GUEST DETAILS', leftMargin, y);
+      .text('TENANT DETAILS', leftMargin, y);
 
     y += 20;
     const labelX = leftMargin;

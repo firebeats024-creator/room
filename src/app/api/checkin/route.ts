@@ -96,9 +96,10 @@ export async function POST(request: Request) {
           })
         : null;
 
-      // Create first bill with FULL_MONTH rent
+      // Create first bill with FULL_MONTH rent + maintenance charge
       const effectiveRatePerUnit = ratePerUnit || 10;
       const effectiveOpeningReading = openingMeterReading || 0;
+      const maintenanceCharge = room.maintenanceCharge || 0;
       const bill = await tx.bill.create({
         data: {
           guestId: guest.id,
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
           billingMonth,
           billingYear,
           rentAmount: monthlyRent,
+          maintenanceCharge,
           electricityCharge: 0,
           previousReading: effectiveOpeningReading,
           currentReading: effectiveOpeningReading,
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
           manualAdjustment: 0,
           adjustmentReason: '',
           isCustomBill: false,
-          totalAmount: monthlyRent,
+          totalAmount: monthlyRent + maintenanceCharge,
           dueDate,
           status: 'Unpaid',
         },

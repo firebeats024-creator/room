@@ -1777,7 +1777,7 @@ export default function PgBilling() {
               <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
                 <CardContent className="p-4 space-y-2">
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div><span className="text-muted-foreground">Guest</span><p className="font-medium">{getGuestName(editBill.guest.name, editBill.guest.nameHindi)}</p></div>
+                    <div><span className="text-muted-foreground">Tenant</span><p className="font-medium">{getGuestName(editBill.guest.name, editBill.guest.nameHindi)}</p></div>
                     <div><span className="text-muted-foreground">Room</span><p className="font-medium">{editBill.room.roomNo}</p></div>
                     <div><span className="text-muted-foreground">Period</span><p className="font-medium">{formatBillPeriodWithCycleDate(editBill.billingMonth, editBill.billingYear, editBill.guest.billingCycleDate)}</p></div>
                     <div><span className="text-muted-foreground">{t("billing_overdue_tab")}</span><p><StatusBadge status={editBill.status} /></p></div>
