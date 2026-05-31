@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     if (!guestId) {
       return NextResponse.json(
-        { error: 'Guest ID is required' },
+        { error: 'Tenant ID is required' },
         { status: 400 }
       );
     }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     if (!guest || guest.status !== 'Live') {
       return NextResponse.json(
-        { error: 'Guest not found or not active' },
+        { error: 'Tenant not found or not active' },
         { status: 404 }
       );
     }
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
 
     if (unpaidBills.length === 0) {
       return NextResponse.json(
-        { error: 'No outstanding dues for this guest' },
+        { error: 'No outstanding dues for this tenant' },
         { status: 400 }
       );
     }

@@ -67,14 +67,14 @@ export async function POST(request: Request) {
 
     if (!guest) {
       return NextResponse.json(
-        { error: 'Guest not found' },
+        { error: 'Tenant not found' },
         { status: 404 }
       );
     }
 
     if (guest.status === 'Checked-out') {
       return NextResponse.json(
-        { error: 'Cannot add reading for checked-out guest' },
+        { error: 'Cannot add reading for checked-out tenant' },
         { status: 400 }
       );
     }

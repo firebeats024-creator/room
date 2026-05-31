@@ -62,7 +62,7 @@ export async function GET(
 
     if (!guest) {
       return NextResponse.json(
-        { error: 'Guest not found' },
+        { error: 'Tenant not found' },
         { status: 404 }
       );
     }
@@ -428,9 +428,9 @@ export async function GET(
 
     return NextResponse.json(guest);
   } catch (error) {
-    console.error('Error fetching guest:', error);
+    console.error('Error fetching tenant:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch guest' },
+      { error: 'Failed to fetch tenant' },
       { status: 500 }
     );
   }

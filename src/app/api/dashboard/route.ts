@@ -151,7 +151,7 @@ export async function GET() {
         if (currentMonth === 0) { currentMonth = 12; currentYear--; }
       }
 
-      const unpaidBills = guest.bills.filter(b => b.status !== 'Paid');
+      const guestUnpaidBills = guest.bills.filter(b => b.status !== 'Paid');
       const currentPeriodBill = guest.bills.find(b => b.billingMonth === currentMonth && b.billingYear === currentYear);
       const currentMonthBill = currentPeriodBill
         ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
@@ -164,9 +164,17 @@ export async function GET() {
       if (now.getDate() < checkIn.getDate()) months--;
       if (months < 0) months = 0;
 
+      // Calculate due months and outstanding from unpaid bills
+      const totalDueMonthsCount = guestUnpaidBills.length;
+      const outstandingAmount = guestUnpaidBills.reduce(
+        (sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)),
+        0
+      );
+
       return {
         id: guest.id,
         name: guest.name,
+        nameHindi: guest.nameHindi,
         phone: guest.phone,
         checkInDate: guest.checkInDate,
         status: guest.status,
@@ -179,6 +187,8 @@ export async function GET() {
           currentMonthBill,
           previousDue,
           stayMonths: months,
+          totalDueMonthsCount,
+          outstandingAmount,
         },
       };
     });

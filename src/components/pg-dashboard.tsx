@@ -154,6 +154,8 @@ interface DashboardData {
       currentMonthBill: number
       previousDue: number
       stayMonths: number
+      totalDueMonthsCount: number
+      outstandingAmount: number
     }
   }[]
   revenueByMonth: Record<number, number>
@@ -296,7 +298,7 @@ export default function PgDashboard() {
 
     try {
       const res = await fetch(`/api/guests/${guestId}`)
-      if (!res.ok) throw new Error('Failed to fetch guest details')
+      if (!res.ok) throw new Error('Failed to fetch tenant details')
       const data = await res.json()
       setGuestDetail(data)
     } catch {
@@ -613,6 +615,22 @@ export default function PgDashboard() {
                   </div>
                 </div>
 
+                {/* Outstanding banner — due months & outstanding amount */}
+                <div className="px-4 pb-2">
+                  <div className="rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center rounded-lg bg-red-500 text-white size-7 text-xs font-bold">
+                        {guest.billing.totalDueMonthsCount}
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-red-800">{guest.billing.totalDueMonthsCount} Month{guest.billing.totalDueMonthsCount !== 1 ? 's' : ''} Due</p>
+                        <p className="text-[9px] text-red-500">Outstanding Balance</p>
+                      </div>
+                    </div>
+                    <p className="text-lg font-extrabold text-red-700">{formatCurrency(guest.billing.outstandingAmount)}</p>
+                  </div>
+                </div>
+
                 {/* 3-column billing cards */}
                 <div className="px-4 pb-3">
                   <div className="grid grid-cols-3 gap-2">
@@ -707,6 +725,14 @@ export default function PgDashboard() {
               ? Math.max(0, currentPeriodBill.totalAmount - (currentPeriodBill.paidAmount || 0))
               : (currentPeriod ? monthlyRent + (guestDetail.room.maintenanceCharge || 0) : 0)
             const previousDue = Math.max(0, totalBalance - currentMonthBill)
+
+            // Calculate due months count and outstanding from unpaid bills
+            const totalDueMonthsCount = unpaidBills.length
+            const previousDueMonthsCount = unpaidBills.filter((b) => {
+              if (!currentPeriod) return true
+              return !(b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
+            }).length
+            const outstandingFromBills = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
 
             // Total Accrued Rent for display
             const totalAccruedRent = totalAccruedRentCalc
@@ -848,10 +874,12 @@ export default function PgDashboard() {
                       <div className="rounded-lg bg-red-50 border border-red-100 p-2.5 text-center">
                         <p className="text-[10px] text-red-400 mb-0.5">{t('guest_current_bill')}</p>
                         <p className="text-sm font-bold text-red-700">{formatCurrency(currentMonthBill)}</p>
+                        <p className="text-[9px] text-red-500/70">1 month</p>
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-100 p-2.5 text-center">
                         <p className="text-[10px] text-amber-500 mb-0.5">{t('guest_previous_due')}</p>
                         <p className="text-sm font-bold text-amber-700">{formatCurrency(previousDue)}</p>
+                        <p className="text-[9px] text-amber-600/70">{previousDueMonthsCount} month{previousDueMonthsCount !== 1 ? 's' : ''} due</p>
                       </div>
                       <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2.5 text-center">
                         <p className="text-[10px] text-emerald-500 mb-0.5">{t('guest_total_paid')}</p>
@@ -859,23 +887,76 @@ export default function PgDashboard() {
                       </div>
                     </div>
 
+                    {/* Due Bills List — CURRENT/OVERDUE badges with date ranges and amounts */}
+                    {unpaidBills.length > 0 && (
+                      <div className="space-y-1.5">
+                        {[...unpaidBills].sort((a, b) => {
+                          if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
+                          return b.billingMonth - a.billingMonth
+                        }).map((b) => {
+                          const isCurrent = currentPeriod
+                            ? b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year
+                            : false
+                          const remaining = Math.max(0, b.totalAmount - (b.paidAmount || 0))
+                          const cycleDate = guestDetail.billingCycleDate
+                          let endMonth = b.billingMonth + 1
+                          let endYear = b.billingYear
+                          if (endMonth > 12) { endMonth = 1; endYear++ }
+                          const dateRange = `${cycleDate}${getOrdinalSuffix(cycleDate)} ${MONTH_NAMES[b.billingMonth - 1]} → ${cycleDate}${getOrdinalSuffix(cycleDate)} ${MONTH_NAMES[endMonth - 1]} ${endYear}`
+
+                          return (
+                            <div
+                              key={b.id}
+                              className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                                isCurrent
+                                  ? 'bg-red-50/80 border-red-200'
+                                  : 'bg-white border-gray-100'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`shrink-0 inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white ${
+                                  isCurrent ? 'bg-red-500' : 'bg-orange-500'
+                                }`}>
+                                  {isCurrent ? 'CURRENT' : 'OVERDUE'}
+                                </span>
+                                <span className="text-[11px] text-gray-500 truncate">{dateRange}</span>
+                              </div>
+                              <span className={`text-xs font-bold shrink-0 ml-2 ${
+                                isCurrent ? 'text-red-700' : 'text-orange-700'
+                              }`}>
+                                {formatCurrency(remaining)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
                     {totalOutstanding > 0 ? (
-                      <div className="flex items-center justify-between bg-red-50 rounded-lg p-3 border border-red-200">
-                        <div>
-                          <p className="text-xs font-semibold text-red-800">{t('guest_total_outstanding')}</p>
-                          <p className="text-lg font-bold text-red-800">{formatCurrency(totalOutstanding)}</p>
+                      <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-3 border border-red-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center justify-center rounded-md bg-red-500 text-white size-6 text-[11px] font-bold">
+                                {totalDueMonthsCount}
+                              </div>
+                              <p className="text-xs font-bold text-red-800">{totalDueMonthsCount} Month{totalDueMonthsCount !== 1 ? 's' : ''} Due</p>
+                            </div>
+                            <p className="text-xs text-red-600">{t('guest_total_outstanding')}</p>
+                            <p className="text-xl font-extrabold text-red-800">{formatCurrency(outstandingFromBills)}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openCustomPay(outstandingFromBills)
+                            }}
+                          >
+                            <IndianRupee className="h-3.5 w-3.5 mr-1" />
+                            {t('guest_pay_now')}
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openCustomPay(totalOutstanding)
-                          }}
-                        >
-                          <IndianRupee className="h-3.5 w-3.5 mr-1" />
-                          {t('guest_pay_now')}
-                        </Button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg border border-emerald-200">

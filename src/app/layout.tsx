@@ -21,22 +21,22 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Room Rent - Smart Billing & Guest Management",
+  title: "Room Rent - Smart Billing & Tenant Management",
   description: "Streamlined room rent management with full-month billing, security deposits, electricity tracking, and manager overrides.",
-  keywords: ["Room Rent", "Rent Management", "Billing", "Guest Management", "Security Deposit", "Rent Collection"],
+  keywords: ["Room Rent", "Rent Management", "Billing", "Tenant Management", "Security Deposit", "Rent Collection"],
   authors: [{ name: "Room Rent" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
     title: "Room Rent",
-    description: "Smart billing & guest management for room rent",
+    description: "Smart billing & tenant management for room rent",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Room Rent",
-    description: "Smart billing & guest management for room rent",
+    description: "Smart billing & tenant management for room rent",
   },
 };
 

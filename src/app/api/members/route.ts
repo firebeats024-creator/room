@@ -44,11 +44,11 @@ export async function POST(request: Request) {
     });
 
     if (!guest) {
-      return NextResponse.json({ error: 'Guest not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
 
     if (guest.status !== 'Live') {
-      return NextResponse.json({ error: 'Cannot update members for checked-out guest' }, { status: 400 });
+      return NextResponse.json({ error: 'Cannot update members for checked-out tenant' }, { status: 400 });
     }
 
     const oldMemberCount = guest.totalMembers;

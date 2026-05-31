@@ -66,6 +66,19 @@ export async function POST() {
       maintenanceBackfilled++;
     }
 
+    // ─── BACKFILL 2: Fix bills marked "Paid" but paidAmount < totalAmount ───
+    const paidBillsNeedingFix = await db.bill.findMany({
+      where: { status: 'Paid' },
+    });
+    for (const bill of paidBillsNeedingFix) {
+      if (bill.paidAmount < bill.totalAmount) {
+        await db.bill.update({
+          where: { id: bill.id },
+          data: { status: 'Partially-Paid' },
+        });
+      }
+    }
+
     for (const guest of liveGuests) {
       // Timezone-safe date parsing for check-in date
       const checkInParts = getDateComponents(guest.checkInDate);

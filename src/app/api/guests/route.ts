@@ -43,9 +43,9 @@ export async function GET() {
 
     return NextResponse.json(guests);
   } catch (error) {
-    console.error('Error fetching guests:', error);
+    console.error('Error fetching tenants:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch guests' },
+      { error: 'Failed to fetch tenants' },
       { status: 500 }
     );
   }

@@ -204,11 +204,11 @@ export default function PgGuests() {
     try {
       setLoading(true);
       const res = await fetch('/api/guests');
-      if (!res.ok) throw new Error('Failed to fetch guests');
+      if (!res.ok) throw new Error('Failed to fetch tenants');
       const data = await res.json();
       setGuests(data);
     } catch {
-      toast.error('Failed to fetch guests');
+      toast.error('Failed to fetch tenants');
     } finally {
       setLoading(false);
     }
@@ -1384,6 +1384,15 @@ export default function PgGuests() {
             // Previous due = total outstanding minus current month's portion
             const previousDue = Math.max(0, totalBalance - currentMonthBill);
 
+            // Calculate due months count and outstanding from unpaid bills
+            const unpaidBills = detailsGuest.bills.filter((b) => b.status !== 'Paid');
+            const totalDueMonthsCount = unpaidBills.length;
+            const previousDueMonthsCount = unpaidBills.filter((b) => {
+              if (!currentPeriod) return true;
+              return !(b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year);
+            }).length;
+            const outstandingFromBills = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0);
+
             return (
               <div className="space-y-4 py-2">
                 {/* ═══════════ SECTION 1: Guest Profile Information ═══════════ */}
@@ -1545,7 +1554,7 @@ export default function PgGuests() {
 
                       {/* Current Month Bill */}
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">{t('guest_current_bill')}</span>
+                        <span className="text-muted-foreground">{t('guest_current_bill')} <span className="text-[9px] text-red-500/70">(1 month)</span></span>
                         <span className="font-medium text-amber-800 dark:text-amber-300">
                           {formatCurrency(currentMonthBill)}
                         </span>
@@ -1553,7 +1562,7 @@ export default function PgGuests() {
 
                       {/* Previous Due */}
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">{t('guest_previous_due')}</span>
+                        <span className="text-muted-foreground">{t('guest_previous_due')} <span className="text-[9px] text-amber-600/70">({previousDueMonthsCount} month{previousDueMonthsCount !== 1 ? 's' : ''} due)</span></span>
                         <span className={`font-medium ${previousDue > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                           {formatCurrency(previousDue)}
                         </span>
@@ -1563,7 +1572,7 @@ export default function PgGuests() {
 
                       {/* Total Outstanding */}
                       <div className="flex justify-between items-center py-1">
-                        <span className="font-bold text-red-800 dark:text-red-300">{t('guest_total_outstanding')}</span>
+                        <span className="font-bold text-red-800 dark:text-red-300">{t('guest_total_outstanding')} <span className="text-[9px] text-red-600/70">({totalDueMonthsCount} month{totalDueMonthsCount !== 1 ? 's' : ''} due)</span></span>
                         <span className="font-bold text-red-800 dark:text-red-300 text-base">
                           {formatCurrency(totalBalance)}
                         </span>
@@ -1574,7 +1583,7 @@ export default function PgGuests() {
                         <div className="mt-1 flex items-start gap-1.5 text-xs text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-950/40 p-2 rounded">
                           <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                           <span>
-                            {t('guest_total_outstanding')} = {t('guest_current_bill')} ({formatCurrency(currentMonthBill)}) + {t('guest_previous_due')} ({formatCurrency(previousDue)})
+                            {totalDueMonthsCount} month{totalDueMonthsCount !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(outstandingFromBills)} = {t('guest_current_bill')} ({formatCurrency(currentMonthBill)}) + {t('guest_previous_due')} ({formatCurrency(previousDue)})
                           </span>
                         </div>
                       )}

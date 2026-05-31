@@ -145,7 +145,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        message: 'Guest checked in successfully',
+        message: 'Tenant checked in successfully',
         guest: result.guest,
         deposit: result.deposit,
         bill: result.bill,
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error during check-in:', error);
     return NextResponse.json(
-      { error: 'Failed to check in guest' },
+      { error: 'Failed to check in tenant' },
       { status: 500 }
     );
   }

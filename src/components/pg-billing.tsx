@@ -154,6 +154,9 @@ interface GuestBucketInfo {
   currentBillAmount: number;        // Current period bill remaining
   previousDue: number;              // Total Balance - Current Bill
   totalBalance: number;             // Total Accrued - Total Paid
+  totalDueMonthsCount: number;      // Count of all unpaid bills (including current)
+  previousDueMonthsCount: number;   // Count of unpaid bills excluding current bill
+  outstandingAmount: number;        // Total outstanding = sum of remaining on all unpaid bills
   currentBillMonth: number;
   currentBillYear: number;
   dueBills: {
@@ -292,6 +295,9 @@ export default function PgBilling() {
         currentBillAmount: 0,
         previousDue: 0,
         totalBalance: 0,
+        totalDueMonthsCount: 0,
+        previousDueMonthsCount: 0,
+        outstandingAmount: 0,
         currentBillMonth: 0,
         currentBillYear: 0,
         dueBills: [],
@@ -432,6 +438,11 @@ export default function PgBilling() {
     // Previous Due = Total Balance - Current Bill
     gs.previousDue = Math.max(0, totalBalance - gs.currentBillAmount);
     gs.totalBalance = totalBalance;
+
+    // Calculate due months count and outstanding from actual unpaid bills
+    gs.totalDueMonthsCount = gs.dueBills.length;
+    gs.previousDueMonthsCount = gs.dueBills.filter(db => !db.isCurrentBill).length;
+    gs.outstandingAmount = gs.dueBills.reduce((sum, db) => sum + db.amount, 0);
   }
 
   const guestSummaryList = Object.values(guestSummary).sort((a, b) => b.totalBalance - a.totalBalance);
@@ -446,6 +457,9 @@ export default function PgBilling() {
     currentBillAmount: number;
     previousDue: number;
     totalBalance: number;
+    totalDueMonthsCount: number;
+    previousDueMonthsCount: number;
+    outstandingAmount: number;
     isCurrentBill: (month: number, year: number) => boolean;
     guestStatus: string;
     checkOutDate: string | null;
@@ -460,6 +474,9 @@ export default function PgBilling() {
       currentBillAmount: gs.currentBillAmount,
       previousDue: gs.previousDue,
       totalBalance: gs.totalBalance,
+      totalDueMonthsCount: gs.totalDueMonthsCount,
+      previousDueMonthsCount: gs.previousDueMonthsCount,
+      outstandingAmount: gs.outstandingAmount,
       isCurrentBill: (month: number, year: number) => month === gs.currentBillMonth && year === gs.currentBillYear,
       guestStatus: gs.guestStatus,
       checkOutDate: gs.checkOutDate,
@@ -715,11 +732,15 @@ export default function PgBilling() {
         let aggregatePreviousDue = 0;
         let aggregateAccruedRent = 0;
         let aggregateTotalAccrued = 0;
+        let aggregateTotalDueMonths = 0;
+        let aggregateOutstanding = 0;
         for (const gs of guestSummaryList) {
           aggregateCurrentBill += gs.currentBillAmount;
           aggregatePreviousDue += gs.previousDue;
           aggregateAccruedRent += gs.totalAccruedRent;
           aggregateTotalAccrued += gs.accruedBreakdown?.totalAccrued || gs.totalAccruedRent;
+          aggregateTotalDueMonths += gs.totalDueMonthsCount;
+          aggregateOutstanding += gs.outstandingAmount;
         }
         const aggregateTotalBalance = aggregateCurrentBill + aggregatePreviousDue;
 
@@ -790,7 +811,7 @@ export default function PgBilling() {
                       {formatCurrency(aggregatePreviousDue)}
                     </p>
                     <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">
-                      {t('billing_older_cycles')}
+                      {aggregateTotalDueMonths} month{aggregateTotalDueMonths !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(aggregateOutstanding)}
                     </p>
                   </div>
                 </div>
@@ -967,15 +988,24 @@ export default function PgBilling() {
                       <TableCell className="text-right bg-red-50/40 dark:bg-red-950/15">
                         <div className="inline-flex flex-col items-end">
                           <span className="font-bold text-red-700 dark:text-red-400">{formatCurrency(gs.currentBillAmount)}</span>
+                          <span className="text-[9px] text-red-500/70 dark:text-red-400/70">1 month</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right bg-amber-50/30 dark:bg-amber-950/10">
                         <div className="inline-flex flex-col items-end">
                           <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(gs.previousDue)}</span>
+                          <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70">
+                            {gs.previousDueMonthsCount} month{gs.previousDueMonthsCount !== 1 ? 's' : ''} due
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right bg-orange-50/30 dark:bg-orange-950/10">
-                        <span className="text-base font-extrabold text-orange-700 dark:text-orange-300">{formatCurrency(gs.totalBalance)}</span>
+                        <div className="inline-flex flex-col items-end">
+                          <span className="text-base font-extrabold text-orange-700 dark:text-orange-300">{formatCurrency(gs.totalBalance)}</span>
+                          <span className="text-[9px] text-orange-600/70 dark:text-orange-400/70">
+                            {gs.totalDueMonthsCount} month{gs.totalDueMonthsCount !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(gs.outstandingAmount)}
+                          </span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1103,14 +1133,21 @@ export default function PgBilling() {
                     <div className="rounded-md bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-2 py-1.5 text-center">
                       <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">{t('billing_current_bill')}</p>
                       <p className="text-sm font-bold text-red-800 dark:text-red-200">{formatCurrency(gs.currentBillAmount)}</p>
+                      <p className="text-[9px] text-red-500/70 dark:text-red-400/70">1 month</p>
                     </div>
                     <div className="rounded-md bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-1.5 text-center">
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{t('billing_previous_due')}</p>
                       <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{formatCurrency(gs.previousDue)}</p>
+                      <p className="text-[9px] text-amber-600/70 dark:text-amber-400/70">
+                        {gs.previousDueMonthsCount} month{gs.previousDueMonthsCount !== 1 ? 's' : ''} due
+                      </p>
                     </div>
                     <div className="rounded-md bg-orange-100 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-800 px-2 py-1.5 text-center">
                       <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">{t('billing_total_balance')}</p>
                       <p className="text-sm font-extrabold text-orange-800 dark:text-orange-200">{formatCurrency(gs.totalBalance)}</p>
+                      <p className="text-[9px] text-orange-600/70 dark:text-orange-400/70">
+                        {gs.totalDueMonthsCount} month{gs.totalDueMonthsCount !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(gs.outstandingAmount)}
+                      </p>
                     </div>
                   </div>
                   {/* Due bills list */}
@@ -1236,6 +1273,9 @@ export default function PgBilling() {
                     const totalBalance = bucket?.totalBalance || 0;
                     const stayMonths = bucket?.stayMonths || 0;
                     const monthlyRent = bucket?.monthlyRent || 0;
+                    const prevDueMonths = bucket?.previousDueMonthsCount || 0;
+                    const totalDueMonths = bucket?.totalDueMonthsCount || 0;
+                    const outstandingAmt = bucket?.outstandingAmount || 0;
 
                     return (
                       <TableRow key={bill.id} className={`group ${
@@ -1338,7 +1378,7 @@ export default function PgBilling() {
                             previousDueVal > 0 ? (
                               <div className="inline-flex flex-col items-end">
                                 <span className="font-bold text-amber-700 dark:text-amber-400">{formatCurrency(previousDueVal)}</span>
-                                <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70">{t('billing_older_cycles')}</span>
+                                <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70">{prevDueMonths} month{prevDueMonths !== 1 ? 's' : ''} due</span>
                               </div>
                             ) : (
                               <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">₹0</span>
@@ -1359,7 +1399,7 @@ export default function PgBilling() {
                                 {formatCurrency(totalBalance)}
                               </span>
                               <span className="text-[9px] text-orange-600/70 dark:text-orange-400/70 mt-0.5">
-                                {t('billing_total_balance')}
+                                {totalDueMonths} month{totalDueMonths !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(outstandingAmt)}
                               </span>
                             </div>
                           ) : (
@@ -1542,6 +1582,9 @@ export default function PgBilling() {
                 const currentBillNow = bucket?.currentBillAmount || 0;
                 const previousDueNow = bucket?.previousDue || 0;
                 const totalBalanceNow = bucket?.totalBalance || 0;
+                const prevDueMonthsNow = bucket?.previousDueMonthsCount || 0;
+                const totalDueMonthsNow = bucket?.totalDueMonthsCount || 0;
+                const outstandingNow = bucket?.outstandingAmount || 0;
                 const paymentAmt = parseFloat(payAmount) || 0;
 
                 // FIFO Payment Allocation for preview
@@ -1554,6 +1597,13 @@ export default function PgBilling() {
                 const currentBillAfter = Math.max(0, currentBillNow - paidToCurrent);
                 const previousDueAfter = Math.max(0, previousDueNow - surplusToPrevious);
                 const totalBalanceAfter = currentBillAfter + previousDueAfter;
+
+                // Calculate months due after payment (estimate based on bill amounts)
+                const perMonthCharge = monthlyRent + (bucket?.maintenanceCharge || 0);
+                const monthsClearedBySurplus = perMonthCharge > 0 ? Math.floor(surplusToPrevious / perMonthCharge) : 0;
+                const prevDueMonthsAfter = Math.max(0, prevDueMonthsNow - monthsClearedBySurplus);
+                const totalDueMonthsAfter = currentBillAfter > 0 ? prevDueMonthsAfter + 1 : prevDueMonthsAfter;
+                const outstandingAfter = totalBalanceAfter;
 
                 return (
                   <>
@@ -1636,10 +1686,12 @@ export default function PgBilling() {
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900 p-2">
                             <p className="text-[10px] text-muted-foreground">{t('billing_current_bill')} ({t('billing_latest_cycle')})</p>
                             <p className="text-sm font-bold text-red-800 dark:text-red-200">{formatCurrency(currentBillNow)}</p>
+                            <p className="text-[9px] text-red-500/70">1 month</p>
                           </div>
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-900 p-2">
-                            <p className="text-[10px] text-muted-foreground">{t('billing_previous_due')} ({t('billing_older_cycles')})</p>
+                            <p className="text-[10px] text-muted-foreground">{t('billing_previous_due')}</p>
                             <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{formatCurrency(previousDueNow)}</p>
+                            <p className="text-[9px] text-amber-600/70">{prevDueMonthsNow} month{prevDueMonthsNow !== 1 ? 's' : ''} due</p>
                           </div>
                           <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900 p-2">
                             <p className="text-[10px] text-muted-foreground">{t('billing_total_paid')}</p>
@@ -1647,7 +1699,10 @@ export default function PgBilling() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between bg-red-100 dark:bg-red-950/50 rounded-md p-2 border border-red-200 dark:border-red-800">
-                          <span className="text-xs font-semibold text-red-800 dark:text-red-200">Total Due (before payment)</span>
+                          <div>
+                            <span className="text-xs font-semibold text-red-800 dark:text-red-200">Total Due (before payment)</span>
+                            <p className="text-[9px] text-red-600/70">{totalDueMonthsNow} month{totalDueMonthsNow !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(outstandingNow)}</p>
+                          </div>
                           <span className="text-base font-bold text-red-800 dark:text-red-200">{formatCurrency(totalBalanceNow)}</span>
                         </div>
                         {(confirmPaidBill.paidAmount || 0) > 0 && (
@@ -1719,7 +1774,10 @@ export default function PgBilling() {
                               </div>
                             )}
                             <div className="flex justify-between bg-orange-100 dark:bg-orange-950/40 rounded px-2 py-1.5 border border-orange-200 dark:border-orange-800 mt-1">
-                              <span className="text-orange-800 dark:text-orange-200 font-bold">{t("billing_total_balance")}</span>
+                              <div>
+                                <span className="text-orange-800 dark:text-orange-200 font-bold">{t("billing_total_balance")}</span>
+                                <p className="text-[9px] text-orange-600/70">{totalDueMonthsAfter} month{totalDueMonthsAfter !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(outstandingAfter)}</p>
+                              </div>
                               <span className="font-extrabold text-orange-800 dark:text-orange-200 text-sm">
                                 {formatCurrency(currentBillAfter)} + {formatCurrency(previousDueAfter)} = {formatCurrency(totalBalanceAfter)}
                               </span>

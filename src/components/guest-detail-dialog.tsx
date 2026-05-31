@@ -213,12 +213,12 @@ export default function GuestDetailDialog({
 
       fetch(`/api/guests/${guestId}`)
         .then((res) => {
-          if (!res.ok) throw new Error('Failed to fetch guest details')
+          if (!res.ok) throw new Error('Failed to fetch tenant details')
           return res.json()
         })
         .then((data) => setGuestDetail(data))
         .catch(() => {
-          toast.error('Failed to load guest details')
+          toast.error('Failed to load tenant details')
           onOpenChange(false)
         })
         .finally(() => setLoading(false))
@@ -483,6 +483,14 @@ export default function GuestDetailDialog({
             const previousDue = Math.max(0, totalBalance - currentMonthBill)
             const totalOutstanding = totalBalance // Same as totalBalance for the accrual model
 
+            // Calculate due months count and outstanding from unpaid bills
+            const totalDueMonthsCount = unpaidBills.length
+            const previousDueMonthsCount = unpaidBills.filter((b) => {
+              if (!currentPeriod) return true
+              return !(b.billingMonth === currentPeriod.month && b.billingYear === currentPeriod.year)
+            }).length
+            const outstandingFromBills = unpaidBills.reduce((sum, b) => sum + Math.max(0, b.totalAmount - (b.paidAmount || 0)), 0)
+
             // ─── Electricity details ───
             const lastElecReading = guestDetail.electricityReadings?.[0]
             const firstBill = guestDetail.bills[0] || null
@@ -740,12 +748,14 @@ export default function GuestDetailDialog({
                             <CardContent className="p-3 text-center">
                               <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide">Current Bill</p>
                               <p className="text-base font-bold text-red-700 mt-1">{formatCurrency(currentMonthBill)}</p>
+                              <p className="text-[9px] text-red-500/70">1 month</p>
                             </CardContent>
                           </Card>
                           <Card className="border-amber-200 bg-amber-50/60">
                             <CardContent className="p-3 text-center">
                               <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wide">Previous Due</p>
                               <p className="text-base font-bold text-amber-700 mt-1">{formatCurrency(previousDue)}</p>
+                              <p className="text-[9px] text-amber-600/70">{previousDueMonthsCount} month{previousDueMonthsCount !== 1 ? 's' : ''} due</p>
                             </CardContent>
                           </Card>
                           <Card className="border-emerald-200 bg-emerald-50/60">
@@ -758,7 +768,10 @@ export default function GuestDetailDialog({
 
                         {/* Total Outstanding row */}
                         <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50/40 px-4 py-3">
-                          <span className="font-bold text-red-800 text-sm">Total Outstanding</span>
+                          <div>
+                            <span className="font-bold text-red-800 text-sm">Total Outstanding</span>
+                            <p className="text-[9px] text-red-600/70">{totalDueMonthsCount} month{totalDueMonthsCount !== 1 ? 's' : ''} due | Outstanding: {formatCurrency(outstandingFromBills)}</p>
+                          </div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-red-800 text-lg">{formatCurrency(totalOutstanding)}</span>
                             {totalOutstanding > 0 && (
@@ -1017,7 +1030,7 @@ export default function GuestDetailDialog({
                   {!isLive && (
                     <div className="py-4 text-center text-muted-foreground text-sm">
                       <Home className="size-8 mx-auto mb-2 text-gray-300" />
-                      <p>Guest has checked out</p>
+                      <p>Tenant has checked out</p>
                       <p className="text-xs mt-1">Check-in: {formatDate(guestDetail.checkInDate)} &bull; Check-out: {formatDate(guestDetail.checkOutDate)}</p>
                     </div>
                   )}
@@ -1026,7 +1039,7 @@ export default function GuestDetailDialog({
             )
           })() : (
             <div className="p-8 text-center text-muted-foreground">
-              No guest details found
+              No tenant details found
             </div>
           )}
         </DialogContent>

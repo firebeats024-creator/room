@@ -120,7 +120,7 @@ export async function GET() {
       const totalBalance = isLive ? accruedBalance : Math.max(accruedBalance, billBalance);
 
       return {
-        'Guest Name': g.name,
+        'Tenant Name': g.name,
         Phone: g.phone,
         'Aadhaar No': g.aadhaarNo,
         Occupation: g.occupation,
@@ -150,9 +150,9 @@ export async function GET() {
     ];
 
     const billsData = bills.map((b) => ({
-      'Guest Name': b.guest.name,
+      'Tenant Name': b.guest.name,
       'Phone': b.guest.phone,
-      'Guest Status': b.guest.status === 'Live' ? 'Active' : 'Checked Out',
+      'Tenant Status': b.guest.status === 'Live' ? 'Active' : 'Checked Out',
       'Room No': b.room.roomNo,
       'Room Type': b.room.type,
       'Billing Month': `${MONTH_NAMES[b.billingMonth - 1]} ${b.billingYear}`,
@@ -178,7 +178,7 @@ export async function GET() {
     // ─── Sheet 4: Security Deposits ───
 
     const depositsData = deposits.map((d) => ({
-      'Guest Name': d.guest.name,
+      'Tenant Name': d.guest.name,
       'Phone': d.guest.phone,
       'Deposit Amount (₹)': fmtCurrency(d.amount),
       'Status': d.status,
@@ -210,7 +210,7 @@ export async function GET() {
       { 'Metric': 'Vacant Rooms', 'Value': vacantRooms },
       { 'Metric': 'Maintenance Rooms', 'Value': maintenanceRooms },
       { 'Metric': 'Occupancy Rate', 'Value': totalRooms > 0 ? `${Math.round((occupiedRooms / totalRooms) * 100)}%` : '0%' },
-      { 'Metric': 'Active Guests', 'Value': activeGuests },
+      { 'Metric': 'Active Tenants', 'Value': activeGuests },
       { 'Metric': 'Total Revenue Collected (₹)', 'Value': fmtCurrency(totalRevenue) },
       { 'Metric': 'Overdue / Unpaid Amount (₹)', 'Value': fmtCurrency(overdueAmount) },
       { 'Metric': 'Security Deposits Held (₹)', 'Value': fmtCurrency(totalDeposits) },
@@ -240,7 +240,7 @@ export async function GET() {
       { wch: 14 }, { wch: 12 }, { wch: 15 }, { wch: 15 },
       { wch: 16 }, { wch: 18 }, { wch: 14 },
     ];
-    XLSX.utils.book_append_sheet(wb, wsGuests, 'Guests');
+    XLSX.utils.book_append_sheet(wb, wsGuests, 'Tenants');
 
     const wsBills = XLSX.utils.json_to_sheet(billsData);
     wsBills['!cols'] = [
@@ -286,7 +286,7 @@ export async function GET() {
 
       return {
         'Room No': g.room.roomNo,
-        'Guest Name': g.name,
+        'Tenant Name': g.name,
         'Status': isLive ? 'Active' : 'Checked Out',
         'Check-in Date': fmtDate(g.checkInDate),
         'Check-out Date': fmtDate(g.checkOutDate),

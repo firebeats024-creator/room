@@ -468,11 +468,11 @@ export default function PGRooms() {
 
     try {
       const res = await fetch(`/api/guests/${guestId}`)
-      if (!res.ok) throw new Error('Failed to fetch guest details')
+      if (!res.ok) throw new Error('Failed to fetch tenant details')
       const data = await res.json()
       setGuestDetail(data)
     } catch {
-      toast.error('Failed to load guest details')
+      toast.error('Failed to load tenant details')
       setGuestDetailOpen(false)
     } finally {
       setGuestDetailLoading(false)
@@ -902,28 +902,34 @@ export default function PGRooms() {
 
                   <div className="grid gap-2">
                     <Label htmlFor="rent">{t('rooms_monthly_rent')}</Label>
-                    <Input
-                      id="rent"
-                      type="number"
-                      min="0"
-                      placeholder="5000"
-                      value={formRent}
-                      onChange={(e) => setFormRent(e.target.value)}
-                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">₹</span>
+                      <Input
+                        id="rent"
+                        type="number"
+                        min="0"
+                        placeholder="5000"
+                        value={formRent}
+                        onChange={(e) => setFormRent(e.target.value)}
+                        className="pl-7 border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid gap-2">
                     <Label htmlFor="maintenanceCharge">{t('rooms_maintenance_charge')}</Label>
-                    <Input
-                      id="maintenanceCharge"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={formMaintenanceCharge}
-                      onChange={(e) => setFormMaintenanceCharge(e.target.value)}
-                      className="border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">₹</span>
+                      <Input
+                        id="maintenanceCharge"
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={formMaintenanceCharge}
+                        onChange={(e) => setFormMaintenanceCharge(e.target.value)}
+                        className="pl-7 border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30"
+                      />
+                    </div>
                     <p className="text-xs text-muted-foreground">{t('rooms_maintenance_hint')}</p>
                   </div>
                 </div>
@@ -2330,17 +2336,20 @@ export default function PGRooms() {
             {/* New charge */}
             <div className="space-y-2">
               <Label htmlFor="editMaintenanceCharge">
-                {t('rooms_new_maintenance')} (₹)
+                {t('rooms_new_maintenance')}
               </Label>
-              <Input
-                id="editMaintenanceCharge"
-                type="number"
-                min="0"
-                placeholder="0"
-                value={editMaintenanceCharge}
-                onChange={(e) => setEditMaintenanceCharge(e.target.value)}
-                className="font-mono text-lg border-orange-200 focus-visible:border-orange-400 focus-visible:ring-orange-400/30"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">₹</span>
+                <Input
+                  id="editMaintenanceCharge"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={editMaintenanceCharge}
+                  onChange={(e) => setEditMaintenanceCharge(e.target.value)}
+                  className="pl-7 font-mono text-lg border-orange-200 focus-visible:border-orange-400 focus-visible:ring-orange-400/30"
+                />
+              </div>
               <p className="text-[10px] text-muted-foreground">
                 {t('rooms_maintenance_hint')}
               </p>

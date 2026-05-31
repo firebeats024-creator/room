@@ -24,6 +24,20 @@ export async function GET() {
       }
     }
 
+    // ─── BACKFILL 2: Fix bills marked "Paid" but paidAmount < totalAmount (after maint backfill) ───
+    // When maintenance was added to a previously-paid bill, the total increased but status wasn't updated
+    const paidBillsNeedingFix = await db.bill.findMany({
+      where: { status: 'Paid' },
+    });
+    for (const bill of paidBillsNeedingFix) {
+      if (bill.paidAmount < bill.totalAmount) {
+        await db.bill.update({
+          where: { id: bill.id },
+          data: { status: 'Partially-Paid' },
+        });
+      }
+    }
+
     // Auto-mark overdue bills: ALL Unpaid bills become Overdue (no separate "Unpaid" concept)
     // Also mark Partially-Paid bills past due date as Overdue
     const today = new Date();
