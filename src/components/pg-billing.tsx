@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Receipt, RefreshCw, CheckCircle2, AlertCircle, Clock, Pencil, DollarSign,
   AlertTriangle, Info, Zap, Users, Calendar, ShieldCheck, TrendingDown,
-  Timer, Calculator, FileDown,
+  Timer, Calculator, FileDown, Search, X, Eye, EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -188,6 +188,7 @@ export default function PgBilling() {
   const [receiptDownloading, setReceiptDownloading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('all');
   const [guestFilter, setGuestFilter] = useState<'all' | 'live' | 'old'>('all');
+  const [roomSearch, setRoomSearch] = useState('');
   const [liveDate] = useState(() => {
     // IMPORTANT: Use local-time date string to avoid UTC/local mismatch
     // When new Date() is passed to getDateComponents (which uses UTC methods),
@@ -222,6 +223,9 @@ export default function PgBilling() {
   const [payAdjustmentReason, setPayAdjustmentReason] = useState('');
   const [payAmount, setPayAmount] = useState('');
 
+  // Accrued values visibility toggle
+  const [showAccruedValues, setShowAccruedValues] = useState(false);
+
   // ---------- Data fetching ----------
 
   const fetchBills = useCallback(async () => {
@@ -247,12 +251,37 @@ export default function PgBilling() {
     return bill.status !== 'Paid';
   };
 
+  // Helper: numeric room sort ("1","2","10" not "1","10","2")
+  const numericRoomSort = (a: string, b: string): number => {
+    const numA = parseInt(a, 10);
+    const numB = parseInt(b, 10);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return a.localeCompare(b);
+  };
+
   // ---------- Filtered bills ----------
-  const filteredBills = bills.filter((b) => {
-    if (activeTab === 'overdue') return isBillDue(b);
-    if (activeTab === 'paid') return b.status === 'Paid';
-    return true;
-  });
+  const filteredBills = bills
+    .filter((b) => {
+      if (activeTab === 'overdue') return isBillDue(b);
+      if (activeTab === 'paid') return b.status === 'Paid';
+      return true;
+    })
+    .filter((b) => {
+      if (!roomSearch.trim()) return true;
+      const q = roomSearch.trim().toLowerCase();
+      return (
+        b.room.roomNo.toLowerCase().includes(q) ||
+        b.guest.name.toLowerCase().includes(q) ||
+        (b.guest.nameHindi || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      // Sort by room number (numeric), then by billing period (newest first)
+      const roomCmp = numericRoomSort(a.room.roomNo, b.room.roomNo);
+      if (roomCmp !== 0) return roomCmp;
+      if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear;
+      return b.billingMonth - a.billingMonth;
+    });
 
   const paidCount = bills.filter((b) => b.status === 'Paid').length;
   const dueCount = bills.filter((b) => isBillDue(b)).length;
@@ -445,7 +474,7 @@ export default function PgBilling() {
     gs.outstandingAmount = gs.dueBills.reduce((sum, db) => sum + db.amount, 0);
   }
 
-  const guestSummaryList = Object.values(guestSummary).sort((a, b) => b.totalBalance - a.totalBalance);
+  const guestSummaryList = Object.values(guestSummary).sort((a, b) => numericRoomSort(a.roomNo, b.roomNo));
 
   // Per-guest bucket lookup (for table columns)
   const guestBucketMap: Record<string, {
@@ -754,12 +783,20 @@ export default function PgBilling() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{t('billing_total_billed')}</p>
-                    <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
-                      {formatCurrency(aggregateTotalAccrued)}
+                    <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                      {showAccruedValues ? formatCurrency(aggregateTotalAccrued) : '₹•••••'}
+                      <button
+                        type="button"
+                        onClick={() => setShowAccruedValues(!showAccruedValues)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        aria-label={showAccruedValues ? 'Hide accrued values' : 'Show accrued values'}
+                      >
+                        {showAccruedValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
                     </p>
                     {aggregateTotalAccrued !== aggregateAccruedRent && (
                       <p className="text-[9px] text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
-                        Rent: {formatCurrency(aggregateAccruedRent)}
+                        Rent: {showAccruedValues ? formatCurrency(aggregateAccruedRent) : '₹•••••'}
                       </p>
                     )}
                   </div>
@@ -845,6 +882,13 @@ export default function PgBilling() {
           if (g.totalBalance <= 0 && g.totalAccruedRent <= 0) return false;
           if (guestFilter === 'live') return g.guestStatus === 'Live';
           if (guestFilter === 'old') return g.guestStatus === 'Checked-out';
+          // Room search filter
+          if (roomSearch.trim()) {
+            const q = roomSearch.trim().toLowerCase();
+            if (!g.roomNo.toLowerCase().includes(q) && !g.guestName.toLowerCase().includes(q) && !g.guestNameHindi.toLowerCase().includes(q)) {
+              return false;
+            }
+          }
           return true;
         });
         const liveCount = guestSummaryList.filter(g => g.guestStatus === 'Live' && (g.totalBalance > 0 || g.totalAccruedRent > 0)).length;
@@ -853,36 +897,56 @@ export default function PgBilling() {
 
         return (
           <>
-            {/* Guest Filter Tabs */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">{t('billing_guests_label')}:</span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant={guestFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  className={`h-7 text-xs px-3 ${guestFilter === 'all' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-emerald-300 text-emerald-700'}`}
-                  onClick={() => setGuestFilter('all')}
-                >
-                  {t('billing_all')} ({totalCount})
-                </Button>
-                <Button
-                  variant={guestFilter === 'live' ? 'default' : 'outline'}
-                  size="sm"
-                  className={`h-7 text-xs px-3 ${guestFilter === 'live' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-emerald-300 text-emerald-700'}`}
-                  onClick={() => setGuestFilter('live')}
-                >
-                  <Users className="h-3 w-3 mr-1" />
-                  {t('billing_guests')} ({liveCount})
-                </Button>
-                <Button
-                  variant={guestFilter === 'old' ? 'default' : 'outline'}
-                  size="sm"
-                  className={`h-7 text-xs px-3 ${guestFilter === 'old' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'border-amber-300 text-amber-700'}`}
-                  onClick={() => setGuestFilter('old')}
-                >
-                  <Clock className="h-3 w-3 mr-1" />
-                  {t('billing_old')} ({oldCount})
-                </Button>
+            {/* Guest Filter Tabs + Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">{t('billing_guests_label')}:</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant={guestFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 text-xs px-3 ${guestFilter === 'all' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-emerald-300 text-emerald-700'}`}
+                    onClick={() => setGuestFilter('all')}
+                  >
+                    {t('billing_all')} ({totalCount})
+                  </Button>
+                  <Button
+                    variant={guestFilter === 'live' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 text-xs px-3 ${guestFilter === 'live' ? 'bg-emerald-600 hover:bg-emerald-700' : 'border-emerald-300 text-emerald-700'}`}
+                    onClick={() => setGuestFilter('live')}
+                  >
+                    <Users className="h-3 w-3 mr-1" />
+                    {t('billing_guests')} ({liveCount})
+                  </Button>
+                  <Button
+                    variant={guestFilter === 'old' ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-7 text-xs px-3 ${guestFilter === 'old' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'border-amber-300 text-amber-700'}`}
+                    onClick={() => setGuestFilter('old')}
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    {t('billing_old')} ({oldCount})
+                  </Button>
+                </div>
+              </div>
+              {/* Room Search in Accrual Section */}
+              <div className="relative w-full sm:w-56">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search Room / Tenant..."
+                  value={roomSearch}
+                  onChange={(e) => setRoomSearch(e.target.value)}
+                  className="pl-8 pr-8 h-8 text-xs border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30 dark:border-emerald-800"
+                />
+                {roomSearch && (
+                  <button
+                    onClick={() => setRoomSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -915,7 +979,19 @@ export default function PgBilling() {
                     <TableHead className="font-semibold text-amber-800 dark:text-amber-200">{t('billing_check_out')}</TableHead>
                     <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_days')}</TableHead>
                     <TableHead className="font-semibold text-red-800 dark:text-red-200 text-center">{t('billing_calculation')}</TableHead>
-                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_accrued_rent')}</TableHead>
+                    <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">
+                      <span className="flex items-center justify-end gap-1">
+                        {t('billing_accrued_rent')}
+                        <button
+                          type="button"
+                          onClick={() => setShowAccruedValues(!showAccruedValues)}
+                          className="text-red-600 dark:text-red-300 hover:text-red-800 dark:hover:text-red-100 transition-colors"
+                          aria-label={showAccruedValues ? 'Hide accrued values' : 'Show accrued values'}
+                        >
+                          {showAccruedValues ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
+                      </span>
+                    </TableHead>
                     <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right">{t('billing_paid')}</TableHead>
                     <TableHead className="font-semibold text-red-800 dark:text-red-200 text-right bg-red-50/80 dark:bg-red-950/40">{t('billing_current_bill_col')}</TableHead>
                     <TableHead className="font-semibold text-amber-800 dark:text-amber-200 text-right bg-amber-50/60 dark:bg-amber-950/30">{t('billing_previous_due_col')}</TableHead>
@@ -965,21 +1041,21 @@ export default function PgBilling() {
                           <Badge className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800">
                             {gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''}
                           </Badge>
-                          <span className="text-[9px] text-muted-foreground mt-0.5">Rent = {formatCurrency(gs.totalAccruedRent)}</span>
+                          <span className="text-[9px] text-muted-foreground mt-0.5">Rent = {showAccruedValues ? formatCurrency(gs.totalAccruedRent) : '₹•••••'}</span>
                           {gs.accruedBreakdown && (gs.accruedBreakdown.maintenance > 0 || gs.accruedBreakdown.electricity > 0) && (
                             <span className="text-[9px] text-amber-700 dark:text-amber-400">
-                              {gs.accruedBreakdown.maintenance > 0 && `+ Maint: ${formatCurrency(gs.accruedBreakdown.maintenance)}`}
-                              {gs.accruedBreakdown.electricity > 0 && ` + Elec: ${formatCurrency(gs.accruedBreakdown.electricity)}`}
+                              {gs.accruedBreakdown.maintenance > 0 && `+ Maint: ${showAccruedValues ? formatCurrency(gs.accruedBreakdown.maintenance) : '₹•••'}`}
+                              {gs.accruedBreakdown.electricity > 0 && ` + Elec: ${showAccruedValues ? formatCurrency(gs.accruedBreakdown.electricity) : '₹•••'}`}
                             </span>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold text-sm">
                         <div className="inline-flex flex-col items-end">
-                          <span>{formatCurrency(gs.totalAccruedRent)}</span>
+                          <span>{showAccruedValues ? formatCurrency(gs.totalAccruedRent) : '₹•••••'}</span>
                           {gs.accruedBreakdown && (gs.accruedBreakdown.maintenance > 0 || gs.accruedBreakdown.electricity > 0) && (
                             <span className="text-[9px] text-amber-600 dark:text-amber-400">
-                              Total: {formatCurrency(gs.accruedBreakdown.totalAccrued)}
+                              Total: {showAccruedValues ? formatCurrency(gs.accruedBreakdown.totalAccrued) : '₹•••••'}
                             </span>
                           )}
                         </div>
@@ -1034,8 +1110,16 @@ export default function PgBilling() {
                         <Timer className="h-3 w-3" />
                         {gs.daysStayed} {t('billing_days_label')} ({gs.stayMonths} {t('billing_months')}{gs.stayMonths !== 1 ? 's' : ''})
                       </span>
-                      <span className="text-muted-foreground">
-                        {t('billing_accrued_rent')}: <span className="font-semibold text-foreground">{formatCurrency(gs.totalAccruedRent)}</span>
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        {t('billing_accrued_rent')}: <span className="font-semibold text-foreground">{showAccruedValues ? formatCurrency(gs.totalAccruedRent) : '₹•••••'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowAccruedValues(!showAccruedValues)}
+                          className="text-gray-400 hover:text-gray-600 transition-colors"
+                          aria-label={showAccruedValues ? 'Hide accrued values' : 'Show accrued values'}
+                        >
+                          {showAccruedValues ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
                       </span>
                       <span className="text-emerald-700 dark:text-emerald-400">
                         {t('billing_paid')}: <span className="font-semibold">{formatCurrency(gs.totalPaid)}</span>
@@ -1057,14 +1141,14 @@ export default function PgBilling() {
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground w-5">1.</span>
                             <span className="text-emerald-700 dark:text-emerald-400">Rent (bills):</span>
-                            <span className="text-foreground">{gs.billCount} bills = <span className="font-semibold">{formatCurrency(gs.totalRentFromBills)}</span></span>
+                            <span className="text-foreground">{gs.billCount} bills = <span className="font-semibold">{showAccruedValues ? formatCurrency(gs.totalRentFromBills) : '₹•••••'}</span></span>
                           </div>
                           {/* Unbilled rent */}
                           {(bd.unbilledRent || 0) > 0 && (
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground w-5"></span>
                               <span className="text-emerald-600/70 dark:text-emerald-400/70">+ Unbilled:</span>
-                              <span className="text-foreground">{Math.max(0, gs.stayMonths - gs.billCount)} months × {formatCurrency(gs.monthlyRent)} = <span className="font-semibold">{formatCurrency(bd.unbilledRent || 0)}</span></span>
+                              <span className="text-foreground">{Math.max(0, gs.stayMonths - gs.billCount)} months × {formatCurrency(gs.monthlyRent)} = <span className="font-semibold">{showAccruedValues ? formatCurrency(bd.unbilledRent || 0) : '₹•••••'}</span></span>
                             </div>
                           )}
                           {/* Step 2: Maintenance from bills */}
@@ -1072,7 +1156,7 @@ export default function PgBilling() {
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground w-5">2.</span>
                               <span className="text-amber-700 dark:text-amber-400">Maintenance:</span>
-                              <span className="text-foreground">{gs.billCount} bills = {formatCurrency(gs.totalMaintenanceFromBills)}{(bd.unbilledMaintenance || 0) > 0 ? ` + ${Math.max(0, gs.stayMonths - gs.billCount)} × ${formatCurrency(gs.maintenanceCharge)} = ` : ' = '}<span className="font-semibold">{formatCurrency(bd.maintenance)}</span></span>
+                              <span className="text-foreground">{gs.billCount} bills = {showAccruedValues ? formatCurrency(gs.totalMaintenanceFromBills) : '₹•••••'}{(bd.unbilledMaintenance || 0) > 0 ? ` + ${Math.max(0, gs.stayMonths - gs.billCount)} × ${formatCurrency(gs.maintenanceCharge)} = ` : ' = '}<span className="font-semibold">{showAccruedValues ? formatCurrency(bd.maintenance) : '₹•••••'}</span></span>
                             </div>
                           )}
                           {/* Step 3: Electricity */}
@@ -1080,7 +1164,7 @@ export default function PgBilling() {
                             <div className="flex items-center gap-1">
                               <span className="text-muted-foreground w-5">{bd.maintenance > 0 ? '3' : '2'}.</span>
                               <span className="text-yellow-600 dark:text-yellow-400">Electricity:</span>
-                              <span className="text-foreground">+ {formatCurrency(bd.electricity)}</span>
+                              <span className="text-foreground">+ {showAccruedValues ? formatCurrency(bd.electricity) : '₹•••••'}</span>
                             </div>
                           )}
                           {/* Step 4: Adjustments */}
@@ -1090,14 +1174,14 @@ export default function PgBilling() {
                                 {(bd.maintenance > 0 ? 1 : 0) + (bd.electricity > 0 ? 1 : 0) + 2}.
                               </span>
                               <span className="text-purple-700 dark:text-purple-400">Adjustment:</span>
-                              <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {formatCurrency(bd.adjustments)}</span>
+                              <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {showAccruedValues ? formatCurrency(bd.adjustments) : '₹•••'}</span>
                             </div>
                           )}
                           {/* Total Accrued */}
                           <div className="flex items-center gap-1 pt-0.5 border-t border-dashed border-emerald-200 dark:border-emerald-800 mt-0.5">
                             <span className="text-muted-foreground w-5"></span>
                             <span className="text-emerald-800 dark:text-emerald-300 font-semibold">Total Accrued:</span>
-                            <span className="text-foreground font-semibold">{formatCurrency(bd.totalAccrued)}</span>
+                            <span className="text-foreground font-semibold">{showAccruedValues ? formatCurrency(bd.totalAccrued) : '₹•••••'}</span>
                           </div>
                           {/* Step: Minus Paid */}
                           {bd.totalPaid > 0 && (
@@ -1198,20 +1282,40 @@ export default function PgBilling() {
         );
       })()}
 
-      {/* Filter Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-emerald-50 dark:bg-emerald-950/40">
-          <TabsTrigger value="all" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            {t('billing_all_bills')} ({bills.length})
-          </TabsTrigger>
-          <TabsTrigger value="overdue" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
-            {t('billing_overdue_tab')} ({dueCount})
-          </TabsTrigger>
-          <TabsTrigger value="paid" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            {t('billing_paid_tab')} ({paidCount})
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* Filter Tabs + Room Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-emerald-50 dark:bg-emerald-950/40">
+            <TabsTrigger value="all" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+              {t('billing_all_bills')} ({bills.length})
+            </TabsTrigger>
+            <TabsTrigger value="overdue" className="data-[state=active]:bg-red-600 data-[state=active]:text-white">
+              {t('billing_overdue_tab')} ({dueCount})
+            </TabsTrigger>
+            <TabsTrigger value="paid" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+              {t('billing_paid_tab')} ({paidCount})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {/* Room Search Filter */}
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by Room or Tenant..."
+            value={roomSearch}
+            onChange={(e) => setRoomSearch(e.target.value)}
+            className="pl-8 pr-8 h-9 text-sm border-emerald-200 focus-visible:border-emerald-400 focus-visible:ring-emerald-400/30 dark:border-emerald-800"
+          />
+          {roomSearch && (
+            <button
+              onClick={() => setRoomSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Bills Table */}
       <Card className="border-emerald-200 dark:border-emerald-800">
@@ -1636,7 +1740,7 @@ export default function PgBilling() {
                           if (!bd) return (
                             <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-center">
                               <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
-                                {formatCurrency(totalAccruedRent)} {t('billing_accrued_rent').toLowerCase()}
+                                {showAccruedValues ? formatCurrency(totalAccruedRent) : '₹•••••'} {t('billing_accrued_rent').toLowerCase()}
                               </span>
                             </div>
                           );
@@ -1644,29 +1748,29 @@ export default function PgBilling() {
                             <div className="rounded-md bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 p-2 text-xs space-y-0.5 font-mono">
                               <div className="flex items-center gap-1">
                                 <span className="text-emerald-700 dark:text-emerald-400">Rent:</span>
-                                <span className="text-foreground">{formatCurrency(bd.rent)} (from bills)</span>
+                                <span className="text-foreground">{showAccruedValues ? formatCurrency(bd.rent) : '₹•••••'} (from bills)</span>
                               </div>
                               {bd.maintenance > 0 && (
                                 <div className="flex items-center gap-1">
                                   <span className="text-amber-700 dark:text-amber-400">Maintenance:</span>
-                                  <span className="text-foreground">+ {formatCurrency(bd.maintenance)}</span>
+                                  <span className="text-foreground">+ {showAccruedValues ? formatCurrency(bd.maintenance) : '₹•••'}</span>
                                 </div>
                               )}
                               {bd.electricity > 0 && (
                                 <div className="flex items-center gap-1">
                                   <span className="text-yellow-600 dark:text-yellow-400">Electricity:</span>
-                                  <span className="text-foreground">+ {formatCurrency(bd.electricity)}</span>
+                                  <span className="text-foreground">+ {showAccruedValues ? formatCurrency(bd.electricity) : '₹•••'}</span>
                                 </div>
                               )}
                               {bd.adjustments !== 0 && (
                                 <div className="flex items-center gap-1">
                                   <span className="text-purple-700 dark:text-purple-400">Adjustment:</span>
-                                  <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {formatCurrency(bd.adjustments)}</span>
+                                  <span className="text-foreground">{bd.adjustments > 0 ? '+' : ''} {showAccruedValues ? formatCurrency(bd.adjustments) : '₹•••'}</span>
                                 </div>
                               )}
                               <div className="flex items-center gap-1 pt-0.5 border-t border-dashed border-emerald-200 dark:border-emerald-800">
                                 <span className="text-emerald-800 dark:text-emerald-300 font-semibold">Total Accrued:</span>
-                                <span className="text-foreground font-semibold">{formatCurrency(bd.totalAccrued)}</span>
+                                <span className="text-foreground font-semibold">{showAccruedValues ? formatCurrency(bd.totalAccrued) : '₹•••••'}</span>
                               </div>
                               {bd.totalPaid > 0 && (
                                 <div className="flex items-center gap-1">

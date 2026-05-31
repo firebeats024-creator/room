@@ -19,6 +19,8 @@ import {
   Settings,
   Zap,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import {
   Card,
@@ -156,6 +158,8 @@ interface DashboardData {
       stayMonths: number
       totalDueMonthsCount: number
       outstandingAmount: number
+      totalElectricity: number
+      totalElectricityUnpaid: number
     }
   }[]
   revenueByMonth: Record<number, number>
@@ -248,6 +252,9 @@ export default function PgDashboard() {
   const [elecUpdateOpen, setElecUpdateOpen] = useState(false)
   const [elecNewReading, setElecNewReading] = useState('')
   const [elecSubmitting, setElecSubmitting] = useState(false)
+
+  // Accrued values visibility toggle
+  const [showAccruedValues, setShowAccruedValues] = useState(false)
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true)
@@ -605,8 +612,18 @@ export default function PgDashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400 flex items-center gap-1.5 text-[13px]">
                       <Calendar className="h-3.5 w-3.5" />
-                      <span className="text-gray-500 font-medium">{formatCurrency(guest.billing.totalAccruedRent)}</span>
+                      <span className="text-gray-500 font-medium">
+                        {showAccruedValues ? formatCurrency(guest.billing.totalAccruedRent) : '₹•••••'}
+                      </span>
                       <span className="text-gray-400">{t('dash_accrued')}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowAccruedValues(!showAccruedValues) }}
+                        className="text-gray-400 hover:text-gray-600 transition-colors ml-0.5"
+                        aria-label={showAccruedValues ? 'Hide accrued value' : 'Show accrued value'}
+                      >
+                        {showAccruedValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      </button>
                     </span>
                     <span className="text-emerald-600 font-semibold flex items-center gap-1 text-[13px]">
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -625,6 +642,12 @@ export default function PgDashboard() {
                       <div>
                         <p className="text-[11px] font-bold text-red-800">{guest.billing.totalDueMonthsCount} Month{guest.billing.totalDueMonthsCount !== 1 ? 's' : ''} Due</p>
                         <p className="text-[9px] text-red-500">Outstanding Balance</p>
+                        {guest.billing.totalElectricityUnpaid > 0 && (
+                          <p className="text-[8px] text-amber-600 flex items-center gap-0.5 mt-0.5">
+                            <Zap className="h-2 w-2" />
+                            Elec: {formatCurrency(guest.billing.totalElectricityUnpaid)} included
+                          </p>
+                        )}
                       </div>
                     </div>
                     <p className="text-lg font-extrabold text-red-700">{formatCurrency(guest.billing.outstandingAmount)}</p>
@@ -645,6 +668,11 @@ export default function PgDashboard() {
                     <div className="rounded-xl bg-red-50 p-2.5 text-center">
                       <p className="text-[10px] font-semibold text-red-400 mb-1 tracking-wide">{t('dash_total_due_label')}</p>
                       <p className="text-[15px] font-bold text-gray-800">{formatCurrency(guest.billing.totalOutstanding)}</p>
+                      {guest.billing.totalElectricityUnpaid > 0 && (
+                        <p className="text-[8px] text-amber-500 flex items-center justify-center gap-0.5 mt-0.5">
+                          <Zap className="h-2 w-2" />{formatCurrency(guest.billing.totalElectricityUnpaid)} elec
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -866,8 +894,18 @@ export default function PgDashboard() {
                         <CreditCard className="h-3.5 w-3.5" />
                         {t('guest_live_billing_status')}
                       </h4>
-                      <span className="text-[10px] text-gray-400">
-                        {daysStayed} {t('guest_days')} · {formatCurrency(dynamicTotalAccrued)} {t('guest_total_accrued')}
+                      <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                        {daysStayed} {t('guest_days')} ·
+                        <span>{showAccruedValues ? formatCurrency(dynamicTotalAccrued) : '₹•••••'}</span>
+                        {t('guest_total_accrued')}
+                        <button
+                          type="button"
+                          onClick={() => setShowAccruedValues(!showAccruedValues)}
+                          className="text-gray-400 hover:text-gray-600 transition-colors"
+                          aria-label={showAccruedValues ? 'Hide accrued value' : 'Show accrued value'}
+                        >
+                          {showAccruedValues ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2.5">
@@ -887,9 +925,9 @@ export default function PgDashboard() {
                       </div>
                     </div>
 
-                    {/* Due Bills List — CURRENT/OVERDUE badges with date ranges and amounts */}
+                    {/* Due Bills List — CURRENT/OVERDUE badges with date ranges, electricity details and amounts */}
                     {unpaidBills.length > 0 && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {[...unpaidBills].sort((a, b) => {
                           if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
                           return b.billingMonth - a.billingMonth
@@ -903,29 +941,96 @@ export default function PgDashboard() {
                           let endYear = b.billingYear
                           if (endMonth > 12) { endMonth = 1; endYear++ }
                           const dateRange = `${cycleDate}${getOrdinalSuffix(cycleDate)} ${MONTH_NAMES[b.billingMonth - 1]} → ${cycleDate}${getOrdinalSuffix(cycleDate)} ${MONTH_NAMES[endMonth - 1]} ${endYear}`
+                          const hasElec = b.unitsConsumed > 0 || b.electricityCharge > 0
+                          const hasPartialPay = (b.paidAmount || 0) > 0
 
                           return (
                             <div
                               key={b.id}
-                              className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                              className={`rounded-xl border overflow-hidden ${
                                 isCurrent
-                                  ? 'bg-red-50/80 border-red-200'
+                                  ? 'bg-red-50/60 border-red-200'
                                   : 'bg-white border-gray-100'
                               }`}
                             >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className={`shrink-0 inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white ${
-                                  isCurrent ? 'bg-red-500' : 'bg-orange-500'
+                              {/* Row 1: Status badge + date + amount */}
+                              <div className="flex items-center justify-between px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`shrink-0 inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white ${
+                                    isCurrent ? 'bg-red-500' : 'bg-orange-500'
+                                  }`}>
+                                    {isCurrent ? 'CURRENT' : 'OVERDUE'}
+                                  </span>
+                                  <span className="text-[11px] text-gray-500 truncate">{dateRange}</span>
+                                </div>
+                                <span className={`text-xs font-bold shrink-0 ml-2 ${
+                                  isCurrent ? 'text-red-700' : 'text-orange-700'
                                 }`}>
-                                  {isCurrent ? 'CURRENT' : 'OVERDUE'}
+                                  {formatCurrency(remaining)}
                                 </span>
-                                <span className="text-[11px] text-gray-500 truncate">{dateRange}</span>
                               </div>
-                              <span className={`text-xs font-bold shrink-0 ml-2 ${
-                                isCurrent ? 'text-red-700' : 'text-orange-700'
-                              }`}>
-                                {formatCurrency(remaining)}
-                              </span>
+
+                              {/* Row 2: Bill breakdown — rent + maintenance + electricity */}
+                              <div className="px-3 pb-2 space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                                  <span className="text-gray-400">{t('guest_rent')}:</span>
+                                  <span className="font-medium text-gray-700">{formatCurrency(b.rentAmount)}</span>
+                                  {(b.maintenanceCharge || 0) > 0 && (
+                                    <>
+                                      <span className="text-gray-300">+</span>
+                                      <span className="text-gray-400">Maint:</span>
+                                      <span className="font-medium text-gray-700">{formatCurrency(b.maintenanceCharge)}</span>
+                                    </>
+                                  )}
+                                  {hasElec && (
+                                    <>
+                                      <span className="text-gray-300">+</span>
+                                      <span className="text-amber-500 flex items-center gap-0.5">
+                                        <Zap className="h-2.5 w-2.5" />
+                                        {formatCurrency(b.electricityCharge)}
+                                      </span>
+                                    </>
+                                  )}
+                                  {(b.manualAdjustment || 0) !== 0 && (
+                                    <>
+                                      <span className="text-gray-300">+</span>
+                                      <span className={`font-medium ${b.manualAdjustment > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                        Adj: {b.manualAdjustment > 0 ? '+' : ''}{formatCurrency(b.manualAdjustment)}
+                                      </span>
+                                    </>
+                                  )}
+                                  {hasPartialPay && (
+                                    <>
+                                      <span className="text-gray-300 ml-0.5">|</span>
+                                      <span className="text-emerald-600 ml-0.5">{t('dash_paid')}: {formatCurrency(b.paidAmount || 0)}</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Electricity detail row — units consumed with reading breakdown */}
+                                {hasElec && (
+                                  <div className="flex items-center gap-1 text-[10px] bg-amber-50/80 rounded-md px-2 py-1 border border-amber-100">
+                                    <Zap className="h-3 w-3 text-amber-500 shrink-0" />
+                                    <span className="text-gray-500">{b.previousReading}</span>
+                                    <span className="text-gray-400">→</span>
+                                    <span className="text-gray-700 font-medium">{b.currentReading}</span>
+                                    <span className="text-gray-300 mx-0.5">|</span>
+                                    <span className="text-amber-700 font-bold">{b.unitsConsumed} units</span>
+                                    <span className="text-gray-300 mx-0.5">|</span>
+                                    <span className="text-gray-500">₹{b.ratePerUnit}/unit</span>
+                                    <span className="text-gray-300 mx-0.5">=</span>
+                                    <span className="text-amber-700 font-bold">{formatCurrency(b.electricityCharge)}</span>
+                                  </div>
+                                )}
+
+                                {/* No electricity yet indicator for current bill */}
+                                {!hasElec && isCurrent && (
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 rounded-md px-2 py-1 border border-gray-100">
+                                    <Zap className="h-3 w-3 text-gray-300 shrink-0" />
+                                    <span>No electricity reading yet</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -1015,6 +1120,79 @@ export default function PgDashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* ⚡ Electricity Consumption History */}
+                {(() => {
+                  const elecBills = [...guestDetail.bills]
+                    .filter((b) => b.unitsConsumed > 0 || b.currentReading > b.previousReading)
+                    .sort((a, b) => {
+                      if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear
+                      return b.billingMonth - a.billingMonth
+                    })
+                  if (elecBills.length === 0) return null
+                  const totalUnits = elecBills.reduce((s, b) => s + b.unitsConsumed, 0)
+                  const totalCharge = elecBills.reduce((s, b) => s + b.electricityCharge, 0)
+                  return (
+                    <div className="px-5 py-4 bg-amber-50/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5" />
+                          ⚡ {t('guest_elec_history')}
+                        </h4>
+                        <Badge variant="outline" className="border-amber-300 text-amber-700 text-[9px] px-1.5 py-0">
+                          {elecBills.length}
+                        </Badge>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="text-[10px] text-amber-600 uppercase tracking-wider border-b border-amber-200/60">
+                              <th className="text-left py-1.5 px-1.5 font-semibold">Month</th>
+                              <th className="text-right py-1.5 px-1 font-semibold">{t('guest_elec_prev_reading')}</th>
+                              <th className="text-right py-1.5 px-1 font-semibold">{t('guest_elec_curr_reading')}</th>
+                              <th className="text-right py-1.5 px-1 font-semibold">{t('guest_elec_units_consumed')}</th>
+                              <th className="text-right py-1.5 px-1 font-semibold">{t('guest_elec_rate')}</th>
+                              <th className="text-right py-1.5 px-1 font-semibold">{t('guest_elec_charge_col')}</th>
+                              <th className="text-center py-1.5 px-1 font-semibold">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {elecBills.map((b) => (
+                              <tr key={b.id} className="border-b border-amber-100/50 hover:bg-amber-50/40">
+                                <td className="py-1.5 px-1.5 font-medium text-gray-700">
+                                  {MONTH_NAMES[b.billingMonth - 1]} '{String(b.billingYear).slice(2)}
+                                </td>
+                                <td className="py-1.5 px-1 text-right font-mono text-gray-500">{b.previousReading}</td>
+                                <td className="py-1.5 px-1 text-right font-mono text-gray-500">{b.currentReading}</td>
+                                <td className="py-1.5 px-1 text-right font-bold text-gray-800">{b.unitsConsumed}</td>
+                                <td className="py-1.5 px-1 text-right text-gray-500">₹{b.ratePerUnit}</td>
+                                <td className="py-1.5 px-1 text-right font-semibold text-amber-700">{formatCurrency(b.electricityCharge)}</td>
+                                <td className="py-1.5 px-1 text-center">
+                                  <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                                    b.status === 'Paid'
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {b.status === 'Paid' ? 'Paid' : 'Unpaid'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-amber-100/30">
+                              <td className="py-1.5 px-1.5 font-bold text-gray-700" colSpan={3}>{t('guest_elec_total_units')}: <span className="text-amber-700">{totalUnits}</span></td>
+                              <td className="py-1.5 px-1 text-right font-bold text-amber-700">{totalUnits}</td>
+                              <td className="py-1.5 px-1"></td>
+                              <td className="py-1.5 px-1 text-right font-bold text-amber-700">{formatCurrency(totalCharge)}</td>
+                              <td className="py-1.5 px-1 text-[9px] text-amber-600 font-semibold">{t('guest_elec_total_charge')}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Payment History */}
                 {guestDetail.bills.filter((b) => b.status === 'Paid').length > 0 && (

@@ -5,7 +5,6 @@ import { db } from '@/lib/db';
 export async function GET() {
   try {
     const rooms = await db.room.findMany({
-      orderBy: { floor: 'asc' },
       include: {
         guests: {
           where: { status: 'Live' },
@@ -16,6 +15,19 @@ export async function GET() {
           take: 5,
         },
       },
+    });
+
+    // Sort rooms by roomNo numerically (1,2,10 not 1,10,2)
+    const numericRoomSort = (a: string, b: string): number => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    };
+    rooms.sort((a, b) => {
+      const floorDiff = a.floor - b.floor;
+      if (floorDiff !== 0) return floorDiff;
+      return numericRoomSort(a.roomNo, b.roomNo);
     });
 
     // Safety: For vacant rooms, ensure monthlyRent = baseRent

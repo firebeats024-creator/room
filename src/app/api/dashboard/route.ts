@@ -108,6 +108,7 @@ export async function GET() {
             electricityCharge: true,
             billingMonth: true,
             billingYear: true,
+            manualAdjustment: true,
           },
         },
       },
@@ -171,6 +172,12 @@ export async function GET() {
         0
       );
 
+      // Total electricity from unpaid bills (for display in dashboard cards)
+      const totalElectricityUnpaid = guestUnpaidBills.reduce(
+        (sum, b) => sum + (b.electricityCharge || 0),
+        0
+      );
+
       return {
         id: guest.id,
         name: guest.name,
@@ -189,9 +196,20 @@ export async function GET() {
           stayMonths: months,
           totalDueMonthsCount,
           outstandingAmount,
+          totalElectricity: totalElectricity,
+          totalElectricityUnpaid,
         },
       };
     });
+
+    // Sort recent guests by room number (numeric) for consistent display
+    const numericRoomSort = (a: string, b: string): number => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    };
+    recentGuestsWithBilling.sort((a, b) => numericRoomSort(a.room.roomNo, b.room.roomNo));
 
     // Rooms under maintenance
     const maintenanceRooms = await db.room.count({

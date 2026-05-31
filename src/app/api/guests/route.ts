@@ -38,8 +38,16 @@ export async function GET() {
           select: { id: true, totalAmount: true, paidAmount: true, status: true, rentAmount: true, electricityCharge: true, billingMonth: true, billingYear: true, dueDate: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
     });
+
+    // Sort guests by room number (numeric) for consistent display
+    const numericRoomSort = (a: string, b: string): number => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    };
+    guests.sort((a, b) => numericRoomSort(a.room.roomNo, b.room.roomNo));
 
     return NextResponse.json(guests);
   } catch (error) {

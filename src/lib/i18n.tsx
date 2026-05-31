@@ -97,6 +97,15 @@ export const translations = {
     guest_details_title: 'Tenant Details',
     guest_live: '● Live',
     guest_checked_out: 'Checked Out',
+    guest_elec_history: 'Electricity Consumption History',
+    guest_elec_prev_reading: 'Prev Reading',
+    guest_elec_curr_reading: 'Curr Reading',
+    guest_elec_units_consumed: 'Units',
+    guest_elec_rate: 'Rate',
+    guest_elec_charge_col: 'Charge',
+    guest_elec_total_units: 'Total Units',
+    guest_elec_total_charge: 'Total Charge',
+    guest_elec_no_data: 'No electricity data yet',
 
     // Rooms
     rooms_management: 'Rooms Management',
@@ -546,6 +555,15 @@ export const translations = {
     guest_details_title: 'किराएदार विवरण',
     guest_live: '● लाइव',
     guest_checked_out: 'चेक-आउट',
+    guest_elec_history: 'बिजली खपत इतिहास',
+    guest_elec_prev_reading: 'पिछली रीडिंग',
+    guest_elec_curr_reading: 'वर्तमान रीडिंग',
+    guest_elec_units_consumed: 'यूनिट',
+    guest_elec_rate: 'रेट',
+    guest_elec_charge_col: 'शुल्क',
+    guest_elec_total_units: 'कुल यूनिट',
+    guest_elec_total_charge: 'कुल बिजली शुल्क',
+    guest_elec_no_data: 'अभी कोई बिजली डेटा नहीं',
 
     // Rooms
     rooms_management: 'कमरों का प्रबंधन',
